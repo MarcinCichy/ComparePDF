@@ -2,9 +2,11 @@ import fitz
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
     QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
+from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
+
 
 class PDFComparer(QMainWindow):
     def __init__(self):
@@ -111,7 +113,7 @@ class PDFComparer(QMainWindow):
 
     def setupControlButtons(self):
         buttonsLayout = QHBoxLayout()
-        for text in ["Compare", "Reset", "Exit"]:
+        for text in ["Compare", "Reset", "Clear", "Print"]:
             btn = QPushButton(text)
             btn.clicked.connect(getattr(self, f"on_{text.lower()}_clicked"))
             buttonsLayout.addWidget(btn)
@@ -152,8 +154,7 @@ class PDFComparer(QMainWindow):
             # Teraz przekazujemy również sensitivity jako argument do compare_images
             result_image = compare_images(base_image, compare_image, self.sensitivity)
             if result_image:
-                q_img = pil2qimage(result_image)
-                self.view.setPhoto(QPixmap.fromImage(q_img))
+                self.view.setHighlights(result_image)  # Ustaw zaznaczenia na scenie
             else:
                 print("Nie można przekonwertować obrazu.")
         else:
@@ -163,6 +164,20 @@ class PDFComparer(QMainWindow):
         self.previewLabel1.clear()
         self.previewLabel2.clear()
         self.file1, self.file2 = None, None
+        self.view.setPhoto(None)  # Resetowanie widoku graficznego
 
-    def on_exit_clicked(self):
-        self.close()
+    def on_clear_clicked(self):
+        print("Clear button clicked")
+        self.view.clearHighlights()  # Ta metoda zostanie zdefiniowana w GraphicsView
+
+    # def on_exit_clicked(self):
+    #     self.close()
+
+    def on_print_clicked(self):
+        printer = QPrinter(QPrinter.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec_() == QPrintDialog.Accepted:
+            painter = QPainter(printer)
+            # Drukowanie zawartości GraphicsView
+            self.view.render(painter)
+            painter.end()
