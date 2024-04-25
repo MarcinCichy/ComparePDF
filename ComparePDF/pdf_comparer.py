@@ -165,7 +165,8 @@ class PDFComparer(QMainWindow):
         self.view.setPhoto(None)  # Resetowanie widoku graficznego
 
     def on_clear_clicked(self):
-        self.view.clearHighlights()  # Ta metoda zostanie zdefiniowana w GraphicsView
+        # self.view.clearHighlights()  # Ta metoda zostanie zdefiniowana w GraphicsView
+        self.view.setPhoto(None)  # Resetowanie widoku graficznego
 
     def on_exit_clicked(self):
         self.close()
