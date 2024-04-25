@@ -26,7 +26,7 @@ class PDFComparer(QMainWindow):
         self.showMaximized()
 
     def initUI(self):
-        self.setWindowTitle('Porównywarka PDF')
+        self.setWindowTitle('PDF Comparer')
         self.mainLayout = QHBoxLayout()
         self.setupPreviewPanel()
         self.setupGraphicsView()
@@ -48,7 +48,6 @@ class PDFComparer(QMainWindow):
     def setupSensitivityControl(self):
         self.sensitivityLabel = QLabel("Sensitivity of recognize differences:")
         self.sensitivityValueLabel = QLabel("{:03d}".format(15))  # Początkowa wartość z suwaka
-
 
         self.sensitivitySlider = QSlider(Qt.Horizontal)
         self.sensitivitySlider.setMinimum(1)
@@ -75,7 +74,6 @@ class PDFComparer(QMainWindow):
     def updateSensitivity(self, value):
         self.sensitivity = value
         self.sensitivityValueLabel.setText("{:03d}".format(value))
-
 
     def setupGraphicsView(self):
         scene = QGraphicsScene()

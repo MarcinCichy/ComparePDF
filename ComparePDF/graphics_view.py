@@ -8,6 +8,8 @@ from utils import pil2qimage
 class GraphicsView(QGraphicsView):
     def __init__(self, scene):
         super(GraphicsView, self).__init__(scene)
+        self.setRenderHints(QPainter.Antialiasing | QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
         self._zoom = 0
         self._empty = True
         self._scene = scene
@@ -35,7 +37,7 @@ class GraphicsView(QGraphicsView):
             self._empty = False
             if self._photo is not None:
                 self._scene.removeItem(self._photo)
-            self._photo = QGraphicsPixmapItem(pixmap)
+            self._photo.setTransformationMode(Qt.SmoothTransformation)  # Ustaw wysoką jakość skalowania
             self._scene.addItem(self._photo)
         else:
             if self._photo is not None:
