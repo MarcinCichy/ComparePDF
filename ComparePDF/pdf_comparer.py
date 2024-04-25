@@ -1,8 +1,9 @@
 import fitz
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
     QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
 
@@ -110,7 +111,7 @@ class PDFComparer(QMainWindow):
 
     def setupControlButtons(self):
         buttonsLayout = QHBoxLayout()
-        for text in ["Compare", "Reset", "Clear", "Exit"]:
+        for text in ["Compare", "Reset", "Clear", "Print"]:
             btn = QPushButton(text)
             btn.clicked.connect(getattr(self, f"on_{text.lower()}_clicked"))
             buttonsLayout.addWidget(btn)
@@ -168,5 +169,14 @@ class PDFComparer(QMainWindow):
         # self.view.clearHighlights()  # Ta metoda zostanie zdefiniowana w GraphicsView
         self.view.setPhoto(None)  # Resetowanie widoku graficznego
 
-    def on_exit_clicked(self):
-        self.close()
+    # def on_exit_clicked(self):
+    #     self.close()
+
+    def on_print_clicked(self):
+        printer = QPrinter(QPrinter.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec_() == QPrintDialog.Accepted:
+            painter = QPainter(printer)
+            # Drukowanie zawartości GraphicsView
+            self.view.render(painter)
+            painter.end()
