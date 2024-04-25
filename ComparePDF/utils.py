@@ -23,9 +23,7 @@ def pdf_to_image(pdf_path):
     """Konwertuje pierwszą stronę PDF na obraz PIL."""
     doc = fitz.open(pdf_path)
     page = doc.load_page(0)
-    # Ustaw wyższe DPI; standardowe to około 72, tutaj używamy 300 dla lepszej jakości
-    mat = fitz.Matrix(72 / 72, 72 / 72)
-    pix = page.get_pixmap(matrix=mat)
+    pix = page.get_pixmap()
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
     doc.close()
     return img
