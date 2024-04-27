@@ -49,12 +49,15 @@ def compare_images(base_image, compare_image, sensitivity=15):
     import cv2
     diff_array = diff_array.astype(np.uint8)
     contours, _ = cv2.findContours(diff_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    original_image = base_image.copy()
+
     draw = ImageDraw.Draw(base_image)
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
         draw.rectangle([x - 5, y - 5, x + w + 5, y + h + 5], outline="red", width=3)
 
-    return base_image
+    return base_image, original_image
 
 
 def save_image_to_pdf(image, filename):

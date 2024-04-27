@@ -150,24 +150,53 @@ class PDFComparer(QMainWindow):
             base_image = pdf_to_image(base_file)
             compare_image = pdf_to_image(compare_file)
             # Teraz przekazujemy również sensitivity jako argument do compare_images
-            result_image = compare_images(base_image, compare_image, self.sensitivity)
-            if result_image:
-                q_img = pil2qimage(result_image)
-                self.view.setPhoto(QPixmap.fromImage(q_img))
+            # result_image = compare_images(base_image, compare_image, self.sensitivity)
+            # if result_image:
+            #     q_img = pil2qimage(result_image)
+            #     self.view.setPhoto(QPixmap.fromImage(q_img))
+            # else:
+            #     print("Nie można przekonwertować obrazu.")
+            result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
+            if result_image and original_image:
+                self.result_image = pil2qimage(result_image)  # Obraz z czerwonymi ramkami
+                self.original_image = pil2qimage(original_image)  # Czysty obraz bazowy
+                self.view.setPhoto(QPixmap.fromImage(self.result_image))  # Domyślnie pokazuje wynik
             else:
                 print("Nie można przekonwertować obrazu.")
         else:
             print("Proszę wczytać oba pliki PDF.")
 
+    # def on_reset_clicked(self):
+    #     self.previewLabel1.clear()
+    #     self.previewLabel2.clear()
+    #     self.file1, self.file2 = None, None
+    #     self.view.setPhoto(None)  # Resetowanie widoku graficznego
+
     def on_reset_clicked(self):
-        self.previewLabel1.clear()
-        self.previewLabel2.clear()
-        self.file1, self.file2 = None, None
-        self.view.setPhoto(None)  # Resetowanie widoku graficznego
+        if self.previewLabel1 and self.previewLabel2:
+            self.previewLabel1.clear()  # Czyści wyświetlanie obrazów
+            self.previewLabel2.clear()
+        self.file1, self.file2 = None, None  # Resetuje zmienne plików
+        if self.view:
+            self.view.setPhoto(None)  # Czyści wyświetlany obraz w GraphicsView
 
     def on_clear_clicked(self):
         # self.view.clearHighlights()  # Ta metoda zostanie zdefiniowana w GraphicsView
-        self.view.setPhoto(None)  # Resetowanie widoku graficznego
+        # self.view.setPhoto(None)  # Resetowanie widoku graficznego
+
+        # if self.view:
+        #     self.view.setPhoto(None)  # Resetuje widok graficzny be
+
+        if hasattr(self, 'original_image'):  # Sprawdzenie, czy oryginalny obraz jest dostępny
+            self.view.setPhoto(QPixmap.fromImage(self.original_image))  # Ustawienie czystego obrazu bazowego
+            print("Widok został zresetowany do oryginalnego obrazu bazowego.")
+        else:
+            print("Brak dostępnego obrazu bazowego.")
+
+    # def on_clear_clicked(self):
+    #     # Czyści wyświetlane obrazy i resetuje GraphicsView do stanu początkowego
+    #     self.on_reset_clicked()  # Wykorzystuje już istniejącą funkcjonalność resetowania
+    #     # Tutaj możesz dodać dodatkowy kod do czyszczenia specyficznych elementów graficznych, jeśli takie istnieją
 
     # def on_exit_clicked(self):
     #     self.close()

@@ -14,31 +14,42 @@ class GraphicsView(QGraphicsView):
         self._photo = None
 
     def fitImageInView(self, scale=True):
-        rect = self.sceneRect()
-        if not rect.isNull():
-            self.setSceneRect(rect)
-            if self.hasPhoto():
-                unity = self.transform().mapRect(QRectF(0, 0, 1, 1))
-                self.scale(1 / unity.width(), 1 / unity.height())
-                viewrect = self.viewport().rect()
-                scenerect = self.transform().mapRect(rect)
-                factor = min(viewrect.width() / scenerect.width(), viewrect.height() / scenerect.height())
-                self.scale(factor, factor)
-            self._zoom = 0
+        if self._photo is None:
+            return  # Jeśli nie ma zdjęcia, nie ma co dopasowywać
+
+        # Resetuje przekształcenie, by uniknąć kumulacji skalowania
+        self.resetTransform()
+
+        # Uzyskanie rozmiarów elementów do skalowania
+        rect = self._photo.boundingRect()
+        if rect.isNull():
+            return
+
+        unity = self.transform().mapRect(QRectF(0, 0, 1, 1))
+        self.scale(1 / unity.width(), 1 / unity.height())
+        viewrect = self.viewport().rect()
+        scenerect = self.transform().mapRect(rect)
+
+        # Obliczanie współczynnika skalowania
+        factor = min(viewrect.width() / scenerect.width(), viewrect.height() / scenerect.height())
+        self.scale(factor, factor)
+        self._zoom = 0  # Resetuje poziom zoomu
 
     def hasPhoto(self):
         return not self._empty
 
     def setPhoto(self, pixmap=None):
-        if pixmap and not pixmap.isNull():
-            self._empty = False
-            self.setScene(self._scene)
-            self._photo = QGraphicsPixmapItem(pixmap)
-            self._scene.addItem(self._photo)
-        else:
+        if pixmap is None or pixmap.isNull():
             self._empty = True
             self._scene.clear()
-        self.fitImageInView()
+            self._photo = None
+        else:
+            self._empty = False
+            if not self._photo:
+                self._photo = QGraphicsPixmapItem()
+                self._scene.addItem(self._photo)
+            self._photo.setPixmap(pixmap)
+            self.fitImageInView()  # Wywołanie dopasowania po ustawieniu zdjęcia
 
     def wheelEvent(self, event: QWheelEvent):
         if self.hasPhoto():
