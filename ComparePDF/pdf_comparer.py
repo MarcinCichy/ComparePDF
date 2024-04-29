@@ -187,3 +187,4 @@ class PDFComparer(QMainWindow):
                 self.on_compare_clicked()  # Uruchomienie porównywania
             else:
                 print("Please load both files before comparing.")
+
