@@ -2,10 +2,31 @@ import fitz
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
     QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider, QMessageBox
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG
 from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
+
+
+class PDFLoadTask(QRunnable):
+    def __init__(self, callback, file_path, num, parent):
+        super().__init__()
+        self.callback = callback
+        self.file_path = file_path
+        self.num = num
+        self.parent = parent
+
+    def run(self):
+        try:
+            doc = fitz.open(self.file_path)
+            page = doc.load_page(0)
+            pix = page.get_pixmap()
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(img)
+            doc.close()
+            self.parent.loadFinished(pixmap, self.num)
+        except Exception as e:
+            QMessageBox.critical(None, "Display error", f"Error displaying PDF: {e}")
 
 
 class PDFComparer(QMainWindow):
@@ -110,15 +131,26 @@ class PDFComparer(QMainWindow):
             buttonsLayout.addWidget(btn)
         self.previewLayout.addLayout(buttonsLayout)
 
+    # def loadFile(self, event, num):
+    #     try:
+    #         path, _ = QFileDialog.getOpenFileName(self, f"Select a PDF file {num}", "", "PDF files (*.pdf)")
+    #         if path:
+    #             setattr(self, f"file{num}", path)
+    #             self.displayPDF(path, getattr(self, f"previewLabel{num}"))
+    #     except Exception as e:
+    #         print(f"An error occurred while loading the PDF file: {e}")
+    #         QMessageBox.critical(self, "Loading error", f"An error occurred while loading the PDF file: {e}")
+
     def loadFile(self, event, num):
-        try:
-            path, _ = QFileDialog.getOpenFileName(self, f"Select a PDF file {num}", "", "PDF files (*.pdf)")
-            if path:
-                setattr(self, f"file{num}", path)
-                self.displayPDF(path, getattr(self, f"previewLabel{num}"))
-        except Exception as e:
-            print(f"An error occurred while loading the PDF file: {e}")
-            QMessageBox.critical(self, "Loading error", f"An error occurred while loading the PDF file: {e}")
+        path, _ = QFileDialog.getOpenFileName(self, f"Select a PDF file {num}", "", "PDF files (*.pdf)")
+        if path:
+            setattr(self, f"file{num}", path)
+            task = PDFLoadTask(self.loadFinished, path, num, self)
+            QThreadPool.globalInstance().start(task)
+
+    def loadFinished(self, pixmap, num):
+        label = getattr(self, f"previewLabel{num}")
+        label.setPixmap(pixmap.scaled(label.width(), label.height(), Qt.KeepAspectRatio))
 
     def displayPDF(self, path, label):
         try:
@@ -133,29 +165,56 @@ class PDFComparer(QMainWindow):
             print(f"An error occurred while trying to view the PDF file: {e}")
             QMessageBox.critical(self, "Display error", f"Error displaying PDF: {e}")
 
-    def on_compare_clicked(self):
-        if self.radio1.isChecked():
-            base_file = self.file1
-            compare_file = self.file2
-        elif self.radio2.isChecked():
-            base_file = self.file2
-            compare_file = self.file1
-        else:
-            print("Please select the base file using the radio buttons.")
-            return
+    # def on_compare_clicked(self):
+    #     if self.radio1.isChecked():
+    #         base_file = self.file1
+    #         compare_file = self.file2
+    #     elif self.radio2.isChecked():
+    #         base_file = self.file2
+    #         compare_file = self.file1
+    #     else:
+    #         print("Please select the base file using the radio buttons.")
+    #         return
+    #
+    #     if base_file and compare_file:
+    #         base_image = pdf_to_image(base_file)
+    #         compare_image = pdf_to_image(compare_file)
+    #         result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
+    #         if result_image and original_image:
+    #             self.result_image = pil2qimage(result_image)  # Obraz z czerwonymi ramkami
+    #             self.original_image = pil2qimage(original_image)  # Czysty obraz bazowy
+    #             self.view.setPhoto(QPixmap.fromImage(self.result_image))  # Domyślnie pokazuje wynik
+    #         else:
+    #             print("The image could not be converted.")
+    #     else:
+    #         print("Please upload both PDF files.")
 
-        if base_file and compare_file:
-            base_image = pdf_to_image(base_file)
-            compare_image = pdf_to_image(compare_file)
-            result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
-            if result_image and original_image:
-                self.result_image = pil2qimage(result_image)  # Obraz z czerwonymi ramkami
-                self.original_image = pil2qimage(original_image)  # Czysty obraz bazowy
-                self.view.setPhoto(QPixmap.fromImage(self.result_image))  # Domyślnie pokazuje wynik
+    def on_compare_clicked(self):
+        if self.file1 and self.file2:
+            if self.radio1.isChecked():
+                base_file = self.file1
+                compare_file = self.file2
+            elif self.radio2.isChecked():
+                base_file = self.file2
+                compare_file = self.file1
             else:
-                print("The image could not be converted.")
+                print("Please select the base file using the radio buttons.")
+                return
+
+            task = ImageCompareTask(base_file, compare_file, self.sensitivity, self.compareFinished, self)
+            QThreadPool.globalInstance().start(task)
         else:
             print("Please upload both PDF files.")
+
+    @pyqtSlot(object, object)
+    def compareFinished(self, result_image, original_image):
+        if result_image and original_image:
+            self.result_image = pil2qimage(result_image)  # Konwersja na QImage
+            self.original_image = pil2qimage(original_image)  # Konwersja na QImage
+            self.view.setPhoto(QPixmap.fromImage(self.result_image))
+        else:
+            print("The image could not be converted.")
+
 
     def on_reset_clicked(self):
         if self.previewLabel1 and self.previewLabel2:
@@ -188,3 +247,19 @@ class PDFComparer(QMainWindow):
             else:
                 print("Please load both files before comparing.")
 
+
+class ImageCompareTask(QRunnable):
+    def __init__(self, base_file, compare_file, sensitivity, callback, parent):
+        super().__init__()
+        self.base_file = base_file
+        self.compare_file = compare_file
+        self.sensitivity = sensitivity
+        self.callback = callback
+        self.parent = parent
+
+    def run(self):
+        base_image = pdf_to_image(self.base_file)
+        compare_image = pdf_to_image(self.compare_file)
+        result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
+        QMetaObject.invokeMethod(self.parent, "compareFinished", Qt.QueuedConnection,
+                                 Q_ARG(object, result_image), Q_ARG(object, original_image))
