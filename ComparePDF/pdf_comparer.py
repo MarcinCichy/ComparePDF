@@ -1,11 +1,12 @@
 import fitz
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
-    QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider
+    QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
+
 
 class PDFComparer(QMainWindow):
     def __init__(self):
@@ -25,7 +26,7 @@ class PDFComparer(QMainWindow):
         self.showMaximized()
 
     def initUI(self):
-        self.setWindowTitle('Porównywarka PDF')
+        self.setWindowTitle('PDF Comparator')
         self.mainLayout = QHBoxLayout()
         self.setupPreviewPanel()
         self.setupGraphicsView()
@@ -36,8 +37,8 @@ class PDFComparer(QMainWindow):
 
     def setupPreviewPanel(self):
         self.previewLayout = QVBoxLayout()
-        self.setupFilePreview(1, "Kliknij, aby wczytać pierwszy plik PDF")
-        self.setupFilePreview(2, "Kliknij, aby wczytać drugi plik PDF")
+        self.setupFilePreview(1, "Click to load the first PDF file")
+        self.setupFilePreview(2, "Click to load the second PDF file")
         self.setupControlButtons()
         previewWidget = QWidget()
         previewWidget.setLayout(self.previewLayout)
@@ -74,7 +75,6 @@ class PDFComparer(QMainWindow):
         self.sensitivity = value
         self.sensitivityValueLabel.setText("{:03d}".format(value))
 
-
     def setupGraphicsView(self):
         scene = QGraphicsScene()
         self.view = GraphicsView(scene)
@@ -102,13 +102,6 @@ class PDFComparer(QMainWindow):
         if num == 1:
             radio.setChecked(True)
 
-    def on_radio_changed(self, checked, num):
-        if checked:  # Jeżeli przycisk radiowy został zaznaczony
-            if self.file1 and self.file2:  # Sprawdzenie, czy oba pliki są wczytane
-                self.on_compare_clicked()  # Uruchomienie porównywania
-            else:
-                print("Proszę wczytać oba pliki przed porównaniem.")
-
     def setupControlButtons(self):
         buttonsLayout = QHBoxLayout()
         for text in ["Compare", "Reset", "Clear", "Print"]:
@@ -118,10 +111,14 @@ class PDFComparer(QMainWindow):
         self.previewLayout.addLayout(buttonsLayout)
 
     def loadFile(self, event, num):
-        path, _ = QFileDialog.getOpenFileName(self, f"Wybierz plik PDF {num}", "", "PDF files (*.pdf)")
-        if path:
-            setattr(self, f"file{num}", path)
-            self.displayPDF(path, getattr(self, f"previewLabel{num}"))
+        try:
+            path, _ = QFileDialog.getOpenFileName(self, f"Select a PDF file {num}", "", "PDF files (*.pdf)")
+            if path:
+                setattr(self, f"file{num}", path)
+                self.displayPDF(path, getattr(self, f"previewLabel{num}"))
+        except Exception as e:
+            print(f"An error occurred while loading the PDF file: {e}")
+            QMessageBox.critical(self, "Loading error", f"An error occurred while loading the PDF file: {e}")
 
     def displayPDF(self, path, label):
         try:
@@ -133,7 +130,8 @@ class PDFComparer(QMainWindow):
             label.setPixmap(pixmap.scaled(label.width(), label.height(), Qt.KeepAspectRatio))
             doc.close()
         except Exception as e:
-            print(f"Wystąpił błąd podczas próby wyświetlenia pliku PDF: {e}")
+            print(f"An error occurred while trying to view the PDF file: {e}")
+            QMessageBox.critical(self, "Display error", f"Error displaying PDF: {e}")
 
     def on_compare_clicked(self):
         if self.radio1.isChecked():
@@ -143,34 +141,21 @@ class PDFComparer(QMainWindow):
             base_file = self.file2
             compare_file = self.file1
         else:
-            print("Proszę wybrać plik bazowy za pomocą przycisków radiowych.")
+            print("Please select the base file using the radio buttons.")
             return
 
         if base_file and compare_file:
             base_image = pdf_to_image(base_file)
             compare_image = pdf_to_image(compare_file)
-            # Teraz przekazujemy również sensitivity jako argument do compare_images
-            # result_image = compare_images(base_image, compare_image, self.sensitivity)
-            # if result_image:
-            #     q_img = pil2qimage(result_image)
-            #     self.view.setPhoto(QPixmap.fromImage(q_img))
-            # else:
-            #     print("Nie można przekonwertować obrazu.")
             result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
             if result_image and original_image:
                 self.result_image = pil2qimage(result_image)  # Obraz z czerwonymi ramkami
                 self.original_image = pil2qimage(original_image)  # Czysty obraz bazowy
                 self.view.setPhoto(QPixmap.fromImage(self.result_image))  # Domyślnie pokazuje wynik
             else:
-                print("Nie można przekonwertować obrazu.")
+                print("The image could not be converted.")
         else:
-            print("Proszę wczytać oba pliki PDF.")
-
-    # def on_reset_clicked(self):
-    #     self.previewLabel1.clear()
-    #     self.previewLabel2.clear()
-    #     self.file1, self.file2 = None, None
-    #     self.view.setPhoto(None)  # Resetowanie widoku graficznego
+            print("Please upload both PDF files.")
 
     def on_reset_clicked(self):
         if self.previewLabel1 and self.previewLabel2:
@@ -181,25 +166,11 @@ class PDFComparer(QMainWindow):
             self.view.setPhoto(None)  # Czyści wyświetlany obraz w GraphicsView
 
     def on_clear_clicked(self):
-        # self.view.clearHighlights()  # Ta metoda zostanie zdefiniowana w GraphicsView
-        # self.view.setPhoto(None)  # Resetowanie widoku graficznego
-
-        # if self.view:
-        #     self.view.setPhoto(None)  # Resetuje widok graficzny be
-
         if hasattr(self, 'original_image'):  # Sprawdzenie, czy oryginalny obraz jest dostępny
             self.view.setPhoto(QPixmap.fromImage(self.original_image))  # Ustawienie czystego obrazu bazowego
-            print("Widok został zresetowany do oryginalnego obrazu bazowego.")
+            print("The view has been reset to the original base image.")
         else:
-            print("Brak dostępnego obrazu bazowego.")
-
-    # def on_clear_clicked(self):
-    #     # Czyści wyświetlane obrazy i resetuje GraphicsView do stanu początkowego
-    #     self.on_reset_clicked()  # Wykorzystuje już istniejącą funkcjonalność resetowania
-    #     # Tutaj możesz dodać dodatkowy kod do czyszczenia specyficznych elementów graficznych, jeśli takie istnieją
-
-    # def on_exit_clicked(self):
-    #     self.close()
+            print("No base image available")
 
     def on_print_clicked(self):
         printer = QPrinter(QPrinter.HighResolution)
@@ -209,3 +180,10 @@ class PDFComparer(QMainWindow):
             # Drukowanie zawartości GraphicsView
             self.view.render(painter)
             painter.end()
+
+    def on_radio_changed(self, checked, num):
+        if checked:  # Jeżeli przycisk radiowy został zaznaczony
+            if self.file1 and self.file2:  # Sprawdzenie, czy oba pliki są wczytane
+                self.on_compare_clicked()  # Uruchomienie porównywania
+            else:
+                print("Please load both files before comparing.")
