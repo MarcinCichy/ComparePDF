@@ -38,11 +38,26 @@ class GraphicsView(QGraphicsView):
     def hasPhoto(self):
         return not self._empty
 
+    # def setPhoto(self, pixmap=None):
+    #     if pixmap is None or pixmap.isNull():
+    #         self._empty = True
+    #         self._scene.clear()
+    #         self._photo = None
+    #     else:
+    #         self._empty = False
+    #         if not self._photo:
+    #             self._photo = QGraphicsPixmapItem()
+    #             self._scene.addItem(self._photo)
+    #         self._photo.setPixmap(pixmap)
+    #         self.fitImageInView()  # Wywołanie dopasowania po ustawieniu zdjęcia
+
     def setPhoto(self, pixmap=None):
         if pixmap is None or pixmap.isNull():
             self._empty = True
+            if self._photo:  # Sprawdź czy _photo istnieje
+                self._scene.removeItem(self._photo)  # Usuń obiekt z sceny
+                self._photo = None  # Wyzeruj referencję
             self._scene.clear()
-            self._photo = None
         else:
             self._empty = False
             if not self._photo:
