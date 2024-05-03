@@ -22,11 +22,10 @@ def pil2qimage(pil_image):
 
 def pdf_to_image(pdf_path):
     """Konwertuje pierwszą stronę PDF na obraz PIL."""
-    doc = fitz.open(pdf_path)
-    page = doc.load_page(0)
-    pix = page.get_pixmap()
-    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-    doc.close()
+    with fitz.open(pdf_path) as doc:
+        page = doc.load_page(0)
+        pix = page.get_pixmap()
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
     return img
 
 
@@ -46,7 +45,6 @@ def compare_images(base_image, compare_image, sensitivity=15):
         diff = diff.point(lambda x: 255 if x > sensitivity else 0, '1')
         diff_array = np.array(diff)
 
-
         diff_array = diff_array.astype(np.uint8)
         contours, _ = cv2.findContours(diff_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -62,7 +60,3 @@ def compare_images(base_image, compare_image, sensitivity=15):
         print(f"An error occurred while comparing images: {e}")
         return None, None
 
-
-# def save_image_to_pdf(image, filename):
-#     """Zapisuje obraz PIL do pliku PDF."""
-#     image.save(filename, "PDF", resolution=100.0)
