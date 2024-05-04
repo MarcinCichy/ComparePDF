@@ -181,6 +181,7 @@ class PDFComparer(QMainWindow):
             QMessageBox.critical(self, "Comparison Error", f"An error occurred during comparison: {str(e)}")
 
 
+
     @pyqtSlot(object, object)
     def compareFinished(self, result_image, original_image):
         if result_image and original_image:
