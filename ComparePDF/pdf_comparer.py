@@ -173,6 +173,7 @@ class PDFComparer(QMainWindow):
                     QMessageBox.warning(self, "Selection Error", "Please select the base file using the radio buttons.")
                     return
 
+
                 task = ImageCompareTask(base_file, compare_file, self.sensitivity, self.compareFinished, self)
                 QThreadPool.globalInstance().start(task)
             else:
