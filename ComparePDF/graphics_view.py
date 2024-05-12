@@ -72,3 +72,4 @@ class GraphicsView(QGraphicsView):
             elif event.button() == Qt.RightButton:
                 self.setDragMode(QGraphicsView.NoDrag)
         super(GraphicsView, self).mousePressEvent(event)
+
