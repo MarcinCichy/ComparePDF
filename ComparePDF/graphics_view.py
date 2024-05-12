@@ -74,3 +74,4 @@ class GraphicsView(QGraphicsView):
         super(GraphicsView, self).mousePressEvent(event)
 
 
+

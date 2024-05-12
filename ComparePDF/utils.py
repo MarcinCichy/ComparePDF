@@ -60,3 +60,4 @@ def compare_images(base_image, compare_image, sensitivity=15):
         print(f"An error occurred while comparing images: {e}")
         return None, None
 
+

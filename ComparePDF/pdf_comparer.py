@@ -229,3 +229,4 @@ class ImageCompareTask(QRunnable):
         QMetaObject.invokeMethod(self.parent, "compareFinished", Qt.QueuedConnection,
                                  Q_ARG(object, result_image), Q_ARG(object, original_image))
 
+
