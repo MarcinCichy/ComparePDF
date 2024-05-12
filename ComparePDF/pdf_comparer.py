@@ -25,10 +25,9 @@ class PDFLoadTask(QRunnable):
             pixmap = QPixmap.fromImage(img)
             self.parent.loadFinished(pixmap, self.num)
         except Exception as e:
-            # print(f"An error occurred while loading PDF {self.file_path}: {e}")
             QMessageBox.critical(None, "Load PDF Error", f"Failed to load or process PDF file: {e}")
         finally:
-            doc.close()  # Upewnij się, że dokument jest zawsze zamykany
+            doc.close()
 
 
 class PDFComparer(QMainWindow):
@@ -160,7 +159,6 @@ class PDFComparer(QMainWindow):
             QMessageBox.critical(self, "Display error", f"Error displaying PDF: {e}")
 
     def on_compare_clicked(self):
-        import gc
         try:
             if self.file1 and self.file2:
                 if self.radio1.isChecked():
@@ -170,7 +168,6 @@ class PDFComparer(QMainWindow):
                     base_file = self.file2
                     compare_file = self.file1
                 else:
-                   # print("Please select the base file using the radio buttons.")
                     QMessageBox.warning(self, "Selection Error", "Please select the base file using the radio buttons.")
                     return
                 task = ImageCompareTask(base_file, compare_file, self.sensitivity, self.compareFinished, self)
@@ -179,7 +176,6 @@ class PDFComparer(QMainWindow):
                 QMessageBox.warning(self, "File Error", "Please upload both PDF files.")
         except Exception as e:
             error_msg = f"An error occurred: {e}."
-            # print(error_msg)
             QMessageBox.critical(None, "Error", error_msg)
 
     @pyqtSlot(object, object)
@@ -202,9 +198,6 @@ class PDFComparer(QMainWindow):
     def on_clear_clicked(self):
         if hasattr(self, 'original_image'):
             self.view.setPhoto(QPixmap.fromImage(self.original_image))
-            # print("The view has been reset to the original base image.")
-        # else:
-        #     print("No base image available")
 
     def on_print_clicked(self):
         printer = QPrinter(QPrinter.HighResolution)
@@ -218,8 +211,6 @@ class PDFComparer(QMainWindow):
         if checked:
             if self.file1 and self.file2:
                 self.on_compare_clicked()
-            # else:
-            #     print("Please load both files before comparing.")
 
 
 class ImageCompareTask(QRunnable):

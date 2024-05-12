@@ -1,7 +1,7 @@
 from PyQt5.QtGui import QImage
 from PIL import Image, ImageChops, ImageDraw
 import numpy as np
-import fitz  # PyMuPDF
+import fitz
 import cv2
 
 

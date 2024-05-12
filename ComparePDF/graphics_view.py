@@ -73,3 +73,4 @@ class GraphicsView(QGraphicsView):
                 self.setDragMode(QGraphicsView.NoDrag)
         super(GraphicsView, self).mousePressEvent(event)
 
+
