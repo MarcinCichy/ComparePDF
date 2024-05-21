@@ -2,10 +2,12 @@ import fitz
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
     QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider, QMessageBox
-from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG
+from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG, QByteArray, QBuffer, QIODevice
 from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB, zmień wartość w razie potrzeby
 
 class PDFLoadTask(QRunnable):
     def __init__(self, callback, file_path, num, parent):
@@ -170,11 +172,23 @@ class PDFComparer(QMainWindow):
                 print("Successfully compared images.")
                 self.result_image = pil2qimage(result_image)
                 self.original_image = pil2qimage(original_image)
+
+                # Sprawdź rozmiar wynikowego obrazu
+                buffer = QByteArray()
+                buffer_device = QBuffer(buffer)
+                buffer_device.open(QIODevice.WriteOnly)
+                self.result_image.save(buffer_device, "PNG")
+                buffer_device.close()
+                image_size = buffer.size()
+
+                if image_size > MAX_IMAGE_SIZE:
+                    self.showError(
+                        f"Resulting image is too large to display ({image_size / (1024 * 1024):.2f} MB). Please reduce the sensitivity or try smaller PDFs.")
+                    return
+
                 print(f"Result image size: {self.result_image.size()}")
                 print(f"Original image size: {self.original_image.size()}")
-                # Zmniejszamy rozmiar obrazów
-                self.result_image = self.result_image.scaled(800, 600, Qt.KeepAspectRatio)
-                self.original_image = self.original_image.scaled(800, 600, Qt.KeepAspectRatio)
+
                 pixmap = QPixmap.fromImage(self.result_image)
                 print("Setting photo in GraphicsView.")
                 self.view.setPhoto(pixmap)
@@ -186,45 +200,30 @@ class PDFComparer(QMainWindow):
             print(f"Exception: {e}")
 
     def on_reset_clicked(self):
-        try:
-            if self.previewLabel1 and self.previewLabel2:
-                self.previewLabel1.clear()
-                self.previewLabel2.clear()
-            self.file1, self.file2 = None, None
-            if self.view:
-                self.view.setPhoto(None)
-        except Exception as e:
-            self.showError(f"Error during reset: {e}")
-            print(f"Exception: {e}")
+        if self.previewLabel1 and self.previewLabel2:
+            self.previewLabel1.clear()
+            self.previewLabel2.clear()
+        self.file1, self.file2 = None, None
+        if self.view:
+            self.view.setPhoto(None)
 
     def on_clear_clicked(self):
-        try:
-            if hasattr(self, 'original_image'):
-                self.view.setPhoto(QPixmap.fromImage(self.original_image))
-        except Exception as e:
-            self.showError(f"Error during clear: {e}")
-            print(f"Exception: {e}")
+        if hasattr(self, 'original_image'):
+            self.view.setPhoto(QPixmap.fromImage(self.original_image))
 
     def on_print_clicked(self):
-        try:
-            printer = QPrinter(QPrinter.HighResolution)
-            dialog = QPrintDialog(printer, self)
-            if dialog.exec_() == QPrintDialog.Accepted:
-                painter = QPainter(printer)
-                self.view.render(painter)
-                painter.end()
-        except Exception as e:
-            self.showError(f"Error during print: {e}")
-            print(f"Exception: {e}")
+        printer = QPrinter(QPrinter.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec_() == QPrintDialog.Accepted:
+            painter = QPainter(printer)
+            self.view.render(painter)
+            painter.end()
 
     def on_radio_changed(self, checked, num):
-        try:
-            if checked:
-                if self.file1 and self.file2:
-                    self.on_compare_clicked()
-        except Exception as e:
-            self.showError(f"Error during radio change: {e}")
-            print(f"Exception: {e}")
+        if checked:
+            if self.file1 and self.file2:
+                self.on_compare_clicked()
+
 
 class ImageCompareTask(QRunnable):
     def __init__(self, base_file, compare_file, sensitivity, callback, parent):
