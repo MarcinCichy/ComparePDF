@@ -1,3 +1,6 @@
+import gc
+import logging
+from memory_profiler import profile, memory_usage
 import fitz
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
@@ -8,6 +11,7 @@ from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB, zmień wartość w razie potrzeby
+logging.basicConfig(level=logging.DEBUG)
 
 class PDFLoadTask(QRunnable):
     def __init__(self, callback, file_path, num, parent):
@@ -165,39 +169,42 @@ class PDFComparer(QMainWindow):
             error_msg = f"An error occurred: {e}."
             self.showError(error_msg)
 
+    @profile
     @pyqtSlot(object, object)
     def compareFinished(self, result_image, original_image):
         try:
+            logging.debug("compareFinished called.")
             if result_image and original_image:
-                print("Successfully compared images.")
+                logging.debug("Images are valid.")
                 self.result_image = pil2qimage(result_image)
                 self.original_image = pil2qimage(original_image)
 
-                # Sprawdź rozmiar wynikowego obrazu
                 buffer = QByteArray()
                 buffer_device = QBuffer(buffer)
                 buffer_device.open(QIODevice.WriteOnly)
+                logging.debug("Saving result image to buffer.")
                 self.result_image.save(buffer_device, "PNG")
                 buffer_device.close()
                 image_size = buffer.size()
+                logging.debug(f"Result image size: {image_size} bytes.")
 
                 if image_size > MAX_IMAGE_SIZE:
                     self.showError(
                         f"Resulting image is too large to display ({image_size / (1024 * 1024):.2f} MB). Please reduce the sensitivity or try smaller PDFs.")
                     return
 
-                print(f"Result image size: {self.result_image.size()}")
-                print(f"Original image size: {self.original_image.size()}")
-
                 pixmap = QPixmap.fromImage(self.result_image)
-                print("Setting photo in GraphicsView.")
+                logging.debug("Setting photo in GraphicsView.")
                 self.view.setPhoto(pixmap)
-                print("Photo set successfully in GraphicsView.")
+                logging.debug("Photo set successfully in GraphicsView.")
+                gc.collect()
+                logging.debug("Garbage collection completed after setting photo.")
             else:
                 self.showError("Failed to generate comparison results.")
         except Exception as e:
-            self.showError(f"Error displaying comparison results: {e}")
-            print(f"Exception: {e}")
+            logging.error(f"Error displaying comparison results: {e}")
+            gc.collect()
+            logging.debug("Garbage collection completed after exception.")
 
     def on_reset_clicked(self):
         if self.previewLabel1 and self.previewLabel2:
