@@ -5,8 +5,7 @@ from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton,
                              QRadioButton, QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene,
                              QFrame, QButtonGroup, QSlider, QMessageBox, QProgressDialog)
-from PyQt5.QtCore import (Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG, QByteArray,
-                          QBuffer, QIODevice)
+from PyQt5.QtCore import (Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG)
 from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
@@ -74,11 +73,15 @@ class PDFComparer(QMainWindow):
         self.file2 = None
         self.progress_dialog = None
         self.compare_task = None
+        self.result_qimage = None
+        self.result_pixmap = None
+        self.original_qimage = None
+        self.original_pixmap = None
         self.initUI()
         self.showMaximized()
 
     def initUI(self):
-        self.setWindowTitle('PDF Comparator v1.5')
+        self.setWindowTitle('PDF Comparator v2.0')
         self.mainLayout = QHBoxLayout()
         self.setupPreviewPanel()
         self.setupGraphicsView()
@@ -210,7 +213,7 @@ class PDFComparer(QMainWindow):
     @pyqtSlot(object, object)
     def compareFinished(self, result_image, original_image):
         if self.progress_dialog:
-            # Disconnect the 'canceled' signal before closing the dialog
+            # Odłącz sygnał 'canceled' przed zamknięciem dialogu
             self.progress_dialog.canceled.disconnect(self.on_cancel_compare)
             self.progress_dialog.close()
             self.progress_dialog = None
@@ -218,13 +221,18 @@ class PDFComparer(QMainWindow):
             logging.debug("compareFinished called.")
             if result_image and original_image:
                 logging.debug("Images are valid.")
-                self.result_image = pil2qimage(result_image)
 
-                if self.result_image is None or self.result_image.isNull():
+                # Konwertuj obrazy do "RGBA" przed konwersją na QImage
+                result_image = result_image.convert("RGBA")
+                original_image = original_image.convert("RGBA")
+
+                self.result_qimage = pil2qimage(result_image)
+
+                if self.result_qimage is None or self.result_qimage.isNull():
                     self.showError("Failed to convert result image to QImage.")
                     return
 
-                image_size = self.result_image.sizeInBytes()
+                image_size = self.result_qimage.sizeInBytes()
                 print(f'IMAGE SIZE AFTER CONVERSION = {image_size / (1024 * 1024):.2f} MB')
                 logging.debug(f"Result image size: {image_size} bytes.")
 
@@ -233,14 +241,16 @@ class PDFComparer(QMainWindow):
                         f"Resulting image is too large to display ({image_size / (1024 * 1024):.2f} MB). Please reduce the sensitivity or try smaller PDFs.")
                     return
 
-                pixmap = QPixmap.fromImage(self.result_image)
-                if pixmap.isNull():
+                self.result_pixmap = QPixmap.fromImage(self.result_qimage)
+                if self.result_pixmap.isNull():
                     self.showError("Failed to create QPixmap from QImage.")
                     return
 
-                self.view.setPhoto(pixmap)
+                self.view.setPhoto(self.result_pixmap)
 
-                self.original_image = pil2qimage(original_image)
+                # Przechowujemy oryginalny obraz
+                self.original_qimage = pil2qimage(original_image)
+                self.original_pixmap = QPixmap.fromImage(self.original_qimage)
 
                 gc.collect()
                 logging.debug("Garbage collection completed after setting photo.")
@@ -261,12 +271,8 @@ class PDFComparer(QMainWindow):
             self.view.setPhoto(None)
 
     def on_clear_clicked(self):
-        if hasattr(self, 'original_image'):
-            pixmap = QPixmap.fromImage(self.original_image)
-            if pixmap.isNull():
-                self.showError("Failed to create QPixmap from original QImage.")
-                return
-            self.view.setPhoto(pixmap)
+        if hasattr(self, 'original_pixmap'):
+            self.view.setPhoto(self.original_pixmap)
 
     def on_print_clicked(self):
         printer = QPrinter(QPrinter.HighResolution)

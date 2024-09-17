@@ -1,34 +1,36 @@
 from PyQt5.QtGui import QImage, QPixmap
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageQt
 import numpy as np
 import fitz
 import cv2
+import traceback
 
 
 def pil2qimage(pil_image):
-    """Converts a PIL Image to QImage."""
+    """Konwertuje obraz PIL na QImage bez użycia ImageQt."""
     try:
-        print(f"Converting PIL image to QImage. Size: {pil_image.size}, Mode: {pil_image.mode}")
+        print(f"Converting PIL image to QImage without ImageQt. Size: {pil_image.size}, Mode: {pil_image.mode}")
         if pil_image.mode == "RGB":
-            data = pil_image.tobytes("raw", "RGB")
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGB888)
-            qimage = qimage.rgbSwapped()  # Swap RGB to BGR
+            r, g, b = pil_image.split()
+            arr = Image.merge("RGB", (b, g, r)).tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_RGB888)
         elif pil_image.mode == "RGBA":
-            data = pil_image.tobytes("raw", "RGBA")
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
-            qimage = qimage.rgbSwapped()  # Swap RGBA to BGRA
+            r, g, b, a = pil_image.split()
+            arr = Image.merge("RGBA", (b, g, r, a)).tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
         elif pil_image.mode == "L":
-            data = pil_image.tobytes("raw", "L")
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_Grayscale8)
+            arr = pil_image.tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_Grayscale8)
         else:
             pil_image = pil_image.convert("RGBA")
-            data = pil_image.tobytes("raw", "RGBA")
-            qimage = QImage(data, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
-            qimage = qimage.rgbSwapped()
-        print("Conversion successful.")
+            r, g, b, a = pil_image.split()
+            arr = Image.merge("RGBA", (b, g, r, a)).tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
+        print("Conversion successful without ImageQt.")
         return qimage
     except Exception as e:
         print(f"An error occurred while converting PIL image to QImage: {e}")
+        traceback.print_exc()
         return None
 
 
@@ -50,8 +52,8 @@ def pdf_to_image(pdf_path, dpi=72):
 
 
 def compare_images(base_image, compare_image, sensitivity=15):
-    """Compares two PIL Images and returns an image with differences highlighted.
-    Sensitivity determines the minimum pixel value difference (0-255) considered significant."""
+    """Porównuje dwa obrazy PIL i zwraca obraz z zaznaczonymi różnicami.
+    Sensitivity określa minimalną różnicę w wartościach pikseli (0-255), która jest uznawana za znaczącą."""
     try:
         print(f"Comparing images with sensitivity: {sensitivity}")
         if base_image is None or compare_image is None:
@@ -78,7 +80,8 @@ def compare_images(base_image, compare_image, sensitivity=15):
         draw = ImageDraw.Draw(base_image)
         for contour in contours:
             x, y, w, h = cv2.boundingRect(contour)
-            draw.rectangle([x - 5, y - 5, x + w + 5, y + h + 5], outline="red", width=3)
+            # Zmieniono kolor na (0, 0, 255, 255)
+            draw.rectangle([x - 5, y - 5, x + w + 5, y + h + 5], outline=(0, 0, 255, 255), width=3)
 
         print("Comparison complete.")
         return base_image, original_image

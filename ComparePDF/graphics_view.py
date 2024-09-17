@@ -47,7 +47,9 @@ class GraphicsView(QGraphicsView):
                 if not self._photo:
                     self._photo = QGraphicsPixmapItem()
                     self._scene.addItem(self._photo)
-                self._photo.setPixmap(pixmap)
+                # Przechowujemy pixmapę jako atrybut
+                self._pixmap = pixmap
+                self._photo.setPixmap(self._pixmap)
                 self.fitImageInView()
         except Exception as e:
             print(f"An error occurred while setting photo: {e}")
