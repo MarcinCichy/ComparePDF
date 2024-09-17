@@ -1,39 +1,62 @@
 import gc
 import logging
-from memory_profiler import profile, memory_usage
-import fitz
+import fitz  # Upewnij się, że importujesz fitz
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
-from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton, QRadioButton, \
-    QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene, QFrame, QButtonGroup, QSlider, QMessageBox
-from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG, QByteArray, QBuffer, QIODevice
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton,
+                             QRadioButton, QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene,
+                             QFrame, QButtonGroup, QSlider, QMessageBox, QProgressDialog)
+from PyQt5.QtCore import (Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG, QByteArray,
+                          QBuffer, QIODevice)
 from PyQt5.QtGui import QPixmap, QImage, QPainter
 from utils import pil2qimage, pdf_to_image, compare_images
 from graphics_view import GraphicsView
+import concurrent.futures
 
-MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB, zmień wartość w razie potrzeby
-logging.basicConfig(level=logging.DEBUG)
+MAX_IMAGE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+# Konfiguracja loggera
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.FileHandler("app.log"),
+                        logging.StreamHandler()
+                    ])
+
+logger = logging.getLogger(__name__)
+
 
 class PDFLoadTask(QRunnable):
-    def __init__(self, callback, file_path, num, parent):
+    def __init__(self, callback, file_path, num, parent, timeout=15):
         super().__init__()
         self.callback = callback
         self.file_path = file_path
         self.num = num
         self.parent = parent
+        self.timeout = timeout  # Limit czasu w sekundach
 
     def run(self):
         try:
             print(f"Loading PDF file: {self.file_path}")
-            doc = fitz.open(self.file_path)
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self.load_pdf)
+                pixmap = future.result(timeout=self.timeout)
+                QMetaObject.invokeMethod(self.parent, "loadFinished", Qt.QueuedConnection,
+                                         Q_ARG(QPixmap, pixmap), Q_ARG(int, self.num))
+        except concurrent.futures.TimeoutError:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Loading PDF file timed out after {self.timeout} seconds."))
+        except Exception as e:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Failed to load or process PDF file: {e}"))
+
+    def load_pdf(self):
+        with fitz.open(self.file_path) as doc:
             page = doc.load_page(0)
             pix = page.get_pixmap()
             img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(img)
-            QMetaObject.invokeMethod(self.parent, "loadFinished", Qt.QueuedConnection, Q_ARG(QPixmap, pixmap), Q_ARG(int, self.num))
-        except Exception as e:
-            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection, Q_ARG(str, f"Failed to load or process PDF file: {e}"))
-        finally:
-            doc.close()
+        return pixmap
+
 
 class PDFComparer(QMainWindow):
     def __init__(self):
@@ -49,6 +72,8 @@ class PDFComparer(QMainWindow):
         self.radio2 = None
         self.file1 = None
         self.file2 = None
+        self.progress_dialog = None
+        self.compare_task = None
         self.initUI()
         self.showMaximized()
 
@@ -161,31 +186,46 @@ class PDFComparer(QMainWindow):
                 else:
                     QMessageBox.warning(self, "Selection Error", "Please select the base file using the radio buttons.")
                     return
-                task = ImageCompareTask(base_file, compare_file, self.sensitivity, self.compareFinished, self)
-                QThreadPool.globalInstance().start(task)
+                self.progress_dialog = QProgressDialog("Comparing PDFs...", "Cancel", 0, 0, self)
+                self.progress_dialog.setWindowModality(Qt.WindowModal)
+                self.progress_dialog.canceled.connect(self.on_cancel_compare)
+                self.progress_dialog.show()
+
+                self.compare_task = ImageCompareTask(base_file, compare_file, self.sensitivity, self.compareFinished, self)
+                QThreadPool.globalInstance().start(self.compare_task)
             else:
                 QMessageBox.warning(self, "File Error", "Please upload both PDF files.")
         except Exception as e:
             error_msg = f"An error occurred: {e}."
             self.showError(error_msg)
 
-    @profile
+    def on_cancel_compare(self):
+        if self.compare_task:
+            self.compare_task.cancel()
+        self.showError("Comparison canceled by user.")
+        if self.progress_dialog:
+            self.progress_dialog.close()
+            self.progress_dialog = None
+
     @pyqtSlot(object, object)
     def compareFinished(self, result_image, original_image):
+        if self.progress_dialog:
+            # Disconnect the 'canceled' signal before closing the dialog
+            self.progress_dialog.canceled.disconnect(self.on_cancel_compare)
+            self.progress_dialog.close()
+            self.progress_dialog = None
         try:
             logging.debug("compareFinished called.")
             if result_image and original_image:
                 logging.debug("Images are valid.")
                 self.result_image = pil2qimage(result_image)
-                self.original_image = pil2qimage(original_image)
 
-                buffer = QByteArray()
-                buffer_device = QBuffer(buffer)
-                buffer_device.open(QIODevice.WriteOnly)
-                logging.debug("Saving result image to buffer.")
-                self.result_image.save(buffer_device, "PNG")
-                buffer_device.close()
-                image_size = buffer.size()
+                if self.result_image is None or self.result_image.isNull():
+                    self.showError("Failed to convert result image to QImage.")
+                    return
+
+                image_size = self.result_image.sizeInBytes()
+                print(f'IMAGE SIZE AFTER CONVERSION = {image_size / (1024 * 1024):.2f} MB')
                 logging.debug(f"Result image size: {image_size} bytes.")
 
                 if image_size > MAX_IMAGE_SIZE:
@@ -194,15 +234,21 @@ class PDFComparer(QMainWindow):
                     return
 
                 pixmap = QPixmap.fromImage(self.result_image)
-                logging.debug("Setting photo in GraphicsView.")
+                if pixmap.isNull():
+                    self.showError("Failed to create QPixmap from QImage.")
+                    return
+
                 self.view.setPhoto(pixmap)
-                logging.debug("Photo set successfully in GraphicsView.")
+
+                self.original_image = pil2qimage(original_image)
+
                 gc.collect()
                 logging.debug("Garbage collection completed after setting photo.")
             else:
                 self.showError("Failed to generate comparison results.")
         except Exception as e:
             logging.error(f"Error displaying comparison results: {e}")
+            self.showError(f"Error displaying comparison results: {e}")
             gc.collect()
             logging.debug("Garbage collection completed after exception.")
 
@@ -216,7 +262,11 @@ class PDFComparer(QMainWindow):
 
     def on_clear_clicked(self):
         if hasattr(self, 'original_image'):
-            self.view.setPhoto(QPixmap.fromImage(self.original_image))
+            pixmap = QPixmap.fromImage(self.original_image)
+            if pixmap.isNull():
+                self.showError("Failed to create QPixmap from original QImage.")
+                return
+            self.view.setPhoto(pixmap)
 
     def on_print_clicked(self):
         printer = QPrinter(QPrinter.HighResolution)
@@ -233,27 +283,51 @@ class PDFComparer(QMainWindow):
 
 
 class ImageCompareTask(QRunnable):
-    def __init__(self, base_file, compare_file, sensitivity, callback, parent):
+    def __init__(self, base_file, compare_file, sensitivity, callback, parent, timeout=30):
         super().__init__()
         self.base_file = base_file
         self.compare_file = compare_file
         self.sensitivity = sensitivity
         self.callback = callback
         self.parent = parent
+        self.timeout = timeout  # Limit czasu w sekundach
+        self._is_canceled = False
+
+    def cancel(self):
+        self._is_canceled = True
 
     def run(self):
         try:
             print(f"Comparing images: {self.base_file} vs {self.compare_file}")
-            base_image = pdf_to_image(self.base_file)
-            if base_image is None:
-                raise ValueError(f"Failed to convert {self.base_file} to image.")
-            compare_image = pdf_to_image(self.compare_file)
-            if compare_image is None:
-                raise ValueError(f"Failed to convert {self.compare_file} to image.")
-            result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
-            if result_image is None or original_image is None:
-                raise ValueError("Image comparison failed.")
-            QMetaObject.invokeMethod(self.parent, "compareFinished", Qt.QueuedConnection,
-                                     Q_ARG(object, result_image), Q_ARG(object, original_image))
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self.compare_images)
+                result = future.result(timeout=self.timeout)
+                if result is None:
+                    return
+                result_image, original_image = result
+                QMetaObject.invokeMethod(self.parent, "compareFinished", Qt.QueuedConnection,
+                                         Q_ARG(object, result_image), Q_ARG(object, original_image))
+        except concurrent.futures.TimeoutError:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Image comparison timed out after {self.timeout} seconds."))
         except Exception as e:
-            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection, Q_ARG(str, f"Comparison failed: {e}"))
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Comparison failed: {e}"))
+
+    def compare_images(self):
+        if self._is_canceled:
+            return None
+        base_image = pdf_to_image(self.base_file)
+        if base_image is None:
+            raise ValueError(f"Failed to convert {self.base_file} to image.")
+        if self._is_canceled:
+            return None
+        compare_image = pdf_to_image(self.compare_file)
+        if compare_image is None:
+            raise ValueError(f"Failed to convert {self.compare_file} to image.")
+        if self._is_canceled:
+            return None
+        result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
+        if result_image is None or original_image is None:
+            raise ValueError("Image comparison failed.")
+        return result_image, original_image

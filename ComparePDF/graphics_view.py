@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QGraphicsView, QGraphicsPixmapItem
 from PyQt5.QtGui import QPainter, QWheelEvent, QMouseEvent
 from PyQt5.QtCore import QRectF, Qt
 
+
 class GraphicsView(QGraphicsView):
     def __init__(self, scene):
         super(GraphicsView, self).__init__(scene)
@@ -16,7 +17,6 @@ class GraphicsView(QGraphicsView):
         try:
             if self._photo is None:
                 return
-            print("Fitting image in view.")
             self.resetTransform()
             rect = self._photo.boundingRect()
             if rect.isNull():
@@ -28,7 +28,6 @@ class GraphicsView(QGraphicsView):
             factor = min(viewrect.width() / scenerect.width(), viewrect.height() / scenerect.height())
             self.scale(factor, factor)
             self._zoom = 0
-            print("Image fitted in view.")
         except Exception as e:
             print(f"An error occurred in fitImageInView: {e}")
 
@@ -37,25 +36,19 @@ class GraphicsView(QGraphicsView):
 
     def setPhoto(self, pixmap=None):
         try:
-            print(f"Setting photo. Pixmap is None: {pixmap is None}")
             if pixmap is None or pixmap.isNull():
                 self._empty = True
                 if self._photo:
-                    print("Removing existing photo from scene.")
                     self._scene.removeItem(self._photo)
                     self._photo = None
-                print("Clearing scene.")
                 self._scene.clear()
             else:
                 self._empty = False
                 if not self._photo:
-                    print("Creating new QGraphicsPixmapItem.")
                     self._photo = QGraphicsPixmapItem()
                     self._scene.addItem(self._photo)
-                print("Setting pixmap to QGraphicsPixmapItem.")
                 self._photo.setPixmap(pixmap)
                 self.fitImageInView()
-            print("Photo set successfully.")
         except Exception as e:
             print(f"An error occurred while setting photo: {e}")
 
