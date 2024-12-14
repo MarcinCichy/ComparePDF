@@ -1,6 +1,6 @@
 import gc
 import logging
-import fitz  # Upewnij się, że importujesz fitz
+import fitz
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton,
                              QRadioButton, QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene,
@@ -77,6 +77,7 @@ class PDFComparer(QMainWindow):
         self.result_pixmap = None
         self.original_qimage = None
         self.original_pixmap = None
+        self.testing_mode = True  # Tryb testowy - włącz, aby zapisywać obrazy pośrednie
         self.initUI()
         self.showMaximized()
 
@@ -170,6 +171,8 @@ class PDFComparer(QMainWindow):
 
     @pyqtSlot(QPixmap, int)
     def loadFinished(self, pixmap, num):
+        if self.testing_mode:
+            pixmap.save(f"preview_{num}_test.png", "PNG")
         label = getattr(self, f"previewLabel{num}")
         label.setPixmap(pixmap.scaled(label.width(), label.height(), Qt.KeepAspectRatio))
 
@@ -212,8 +215,11 @@ class PDFComparer(QMainWindow):
 
     @pyqtSlot(object, object)
     def compareFinished(self, result_image, original_image):
+        if self.testing_mode:
+            result_image.save("result_image_test.png")
+            original_image.save("original_image_test.png")
+
         if self.progress_dialog:
-            # Odłącz sygnał 'canceled' przed zamknięciem dialogu
             self.progress_dialog.canceled.disconnect(self.on_cancel_compare)
             self.progress_dialog.close()
             self.progress_dialog = None
@@ -222,7 +228,6 @@ class PDFComparer(QMainWindow):
             if result_image and original_image:
                 logging.debug("Images are valid.")
 
-                # Konwertuj obrazy do "RGBA" przed konwersją na QImage
                 result_image = result_image.convert("RGBA")
                 original_image = original_image.convert("RGBA")
 
@@ -233,7 +238,6 @@ class PDFComparer(QMainWindow):
                     return
 
                 image_size = self.result_qimage.sizeInBytes()
-                print(f'IMAGE SIZE AFTER CONVERSION = {image_size / (1024 * 1024):.2f} MB')
                 logging.debug(f"Result image size: {image_size} bytes.")
 
                 if image_size > MAX_IMAGE_SIZE:
@@ -248,7 +252,6 @@ class PDFComparer(QMainWindow):
 
                 self.view.setPhoto(self.result_pixmap)
 
-                # Przechowujemy oryginalny obraz
                 self.original_qimage = pil2qimage(original_image)
                 self.original_pixmap = QPixmap.fromImage(self.original_qimage)
 
@@ -260,7 +263,6 @@ class PDFComparer(QMainWindow):
             logging.error(f"Error displaying comparison results: {e}")
             self.showError(f"Error displaying comparison results: {e}")
             gc.collect()
-            logging.debug("Garbage collection completed after exception.")
 
     def on_reset_clicked(self):
         if self.previewLabel1 and self.previewLabel2:
@@ -296,7 +298,7 @@ class ImageCompareTask(QRunnable):
         self.sensitivity = sensitivity
         self.callback = callback
         self.parent = parent
-        self.timeout = timeout  # Limit czasu w sekundach
+        self.timeout = timeout
         self._is_canceled = False
 
     def cancel(self):
@@ -323,18 +325,17 @@ class ImageCompareTask(QRunnable):
     def compare_images(self):
         if self._is_canceled:
             return None
-        base_image = pdf_to_image(self.base_file)
+        base_image = pdf_to_image(self.base_file, testing_mode=self.parent.testing_mode)
         if base_image is None:
             raise ValueError(f"Failed to convert {self.base_file} to image.")
         if self._is_canceled:
             return None
-        compare_image = pdf_to_image(self.compare_file)
+        compare_image = pdf_to_image(self.compare_file, testing_mode=self.parent.testing_mode)
         if compare_image is None:
             raise ValueError(f"Failed to convert {self.compare_file} to image.")
         if self._is_canceled:
             return None
-        result_image, original_image = compare_images(base_image, compare_image, self.sensitivity)
+        result_image, original_image = compare_images(base_image, compare_image, self.sensitivity, self.parent.testing_mode)
         if result_image is None or original_image is None:
             raise ValueError("Image comparison failed.")
         return result_image, original_image
-
