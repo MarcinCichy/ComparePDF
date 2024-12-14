@@ -2,8 +2,6 @@
 
 PDF Comparator v2.0 is a PyQt5-based desktop application designed to visually compare two PDF files. It highlights differences between the PDFs, allowing users to quickly identify changes or discrepancies. The application also includes additional features like sensitivity adjustment, file preview, and printing options.
 
-- This application was created almost entirely with the help of AI, specifically ChatGPT, which assisted in generating code, debugging, and documentation.
-
 ## Features
 
 - **PDF Comparison**: Compare two PDF files and highlight differences using visual markers.
@@ -12,6 +10,50 @@ PDF Comparator v2.0 is a PyQt5-based desktop application designed to visually co
 - **PDF Preview**: Preview the loaded PDF files before comparison.
 - **Result Printing**: Print the comparison result directly from the application.
 - **Error Handling**: Robust error handling with descriptive messages for user convenience.
+
+## How the PDF Comparison Works
+
+### 1. Loading PDF Files
+Users select two PDF files to be compared. This is handled by the `loadFile` method in the `PDFComparer` class. 
+Each file is loaded using the `PDFLoadTask` class, which utilizes PyMuPDF (fitz) to convert the first page of each PDF into an image (bitmap) via the `load_pdf` method.
+
+### 2. Converting PDF to Image
+The `load_pdf` method in `utils.py`:
+- Opens the PDF file using PyMuPDF.
+- Renders the first page as an image using the `get_pixmap` method from the page object.
+- Converts the resulting RGB image into a Pillow Image object.
+
+### 3. Comparing Images
+After loading two images, the comparison is performed using the `compare_images` function in `utils.py`.
+#### Steps in the comparison process:
+1. **Calculating Differences**:
+   - The `ImageChops.difference` function from Pillow calculates pixel-by-pixel differences between the two images.
+   - The resulting difference image is converted to grayscale.
+2. **Sensitivity Threshold**:
+   - Using a threshold operation (lambda), differences below the specified sensitivity level are ignored.
+3. **Detecting Contours**:
+   - The difference image is converted to a NumPy array and passed to OpenCV.
+   - The `cv2.findContours` function identifies areas of difference as contours.
+4. **Marking Differences**:
+   - On a copy of the first image, rectangles are drawn around detected differences using Pillow ImageDraw.
+
+### 4. Displaying Results
+The resulting image with highlighted differences is converted into a QImage format using the `pil2qimage` function (in `utils.py`).
+The image is displayed in the graphical component of the application using the `GraphicsView` class.
+
+### 5. User Interactions
+The user can adjust sensitivity for the comparison using a slider (method `updateSensitivity` in the `PDFComparer` class).
+Available options:
+- Resetting comparison results.
+- Viewing the original image.
+- Printing results using the QPrinter class.
+
+### 6. Error Handling
+Each stage of the comparison is surrounded by exception handling.
+In case of errors (e.g., issues loading files or converting images), the user receives a message in a dialog window.
+
+### Example of the Process
+When comparing two PDF files with differences, the application calculates the discrepancies, identifies their contours, and marks them with red rectangles. The resulting image can be saved, printed, or reset.
 
 ## Requirements
 
@@ -89,3 +131,5 @@ This project is licensed under the MIT License. See the LICENSE file for details
 ## Acknowledgments
 
 Special thanks to the developers of PyQt5, PyMuPDF, and other libraries that make this project possible.
+
+This application was created almost entirely with the help of AI, specifically ChatGPT, which assisted in generating code, debugging, and documentation.
