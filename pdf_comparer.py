@@ -337,3 +337,4 @@ class ImageCompareTask(QRunnable):
         if result_image is None or original_image is None:
             raise ValueError("Image comparison failed.")
         return result_image, original_image
+

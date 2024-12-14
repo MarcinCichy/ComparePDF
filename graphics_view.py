@@ -82,3 +82,4 @@ class GraphicsView(QGraphicsView):
             super(GraphicsView, self).mousePressEvent(event)
         except Exception as e:
             print(f"An error occurred in mousePressEvent: {e}")
+

@@ -88,3 +88,4 @@ def compare_images(base_image, compare_image, sensitivity=15):
     except Exception as e:
         print(f"An error occurred while comparing images: {e}")
         return None, None
+
