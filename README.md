@@ -10,50 +10,7 @@ PDF Comparator v2.0 is a PyQt5-based desktop application designed to visually co
 - **PDF Preview**: Preview the loaded PDF files before comparison.
 - **Result Printing**: Print the comparison result directly from the application.
 - **Error Handling**: Robust error handling with descriptive messages for user convenience.
-
-## How the PDF Comparison Works
-
-### 1. Loading PDF Files
-Users select two PDF files to be compared. This is handled by the `loadFile` method in the `PDFComparer` class. 
-Each file is loaded using the `PDFLoadTask` class, which utilizes PyMuPDF (fitz) to convert the first page of each PDF into an image (bitmap) via the `load_pdf` method.
-
-### 2. Converting PDF to Image
-The `load_pdf` method in `utils.py`:
-- Opens the PDF file using PyMuPDF.
-- Renders the first page as an image using the `get_pixmap` method from the page object.
-- Converts the resulting RGB image into a Pillow Image object.
-
-### 3. Comparing Images
-After loading two images, the comparison is performed using the `compare_images` function in `utils.py`.
-#### Steps in the comparison process:
-1. **Calculating Differences**:
-   - The `ImageChops.difference` function from Pillow calculates pixel-by-pixel differences between the two images.
-   - The resulting difference image is converted to grayscale.
-2. **Sensitivity Threshold**:
-   - Using a threshold operation (lambda), differences below the specified sensitivity level are ignored.
-3. **Detecting Contours**:
-   - The difference image is converted to a NumPy array and passed to OpenCV.
-   - The `cv2.findContours` function identifies areas of difference as contours.
-4. **Marking Differences**:
-   - On a copy of the first image, rectangles are drawn around detected differences using Pillow ImageDraw.
-
-### 4. Displaying Results
-The resulting image with highlighted differences is converted into a QImage format using the `pil2qimage` function (in `utils.py`).
-The image is displayed in the graphical component of the application using the `GraphicsView` class.
-
-### 5. User Interactions
-The user can adjust sensitivity for the comparison using a slider (method `updateSensitivity` in the `PDFComparer` class).
-Available options:
-- Resetting comparison results.
-- Viewing the original image.
-- Printing results using the QPrinter class.
-
-### 6. Error Handling
-Each stage of the comparison is surrounded by exception handling.
-In case of errors (e.g., issues loading files or converting images), the user receives a message in a dialog window.
-
-### Example of the Process
-When comparing two PDF files with differences, the application calculates the discrepancies, identifies their contours, and marks them with red rectangles. The resulting image can be saved, printed, or reset.
+- **Test Mode**: Save intermediate results and debug data during the comparison process.
 
 ## Requirements
 
@@ -110,6 +67,73 @@ ComparePDF/
 5. Click the "Compare" button to generate the difference image.
 6. View the highlighted differences and optionally print the results.
 
+## Test Mode (`testing_mode`)
+
+The application provides a test mode to save intermediate images and data during the comparison process. This mode is useful for debugging and analyzing how the program processes the PDF files.
+
+### Generated Files in Test Mode
+
+#### 1. `preview_1_test.png` and `preview_2_test.png`
+
+- **Description**: These are previews of the loaded PDF files, converted into images.
+- **Purpose**: Verify that the PDFs were correctly loaded and converted into images.
+- **Example**:
+
+   ![Preview 1](examples/preview_1_test.png)
+   ![Preview 2](examples/preview_2_test.png)
+
+#### 2. `image_difference_grayscale_test.png`
+
+- **Description**: A grayscale image showing the raw pixel differences between the two PDFs.
+- **Purpose**: Darker pixels indicate smaller differences, while brighter pixels indicate larger differences.
+- **Example**:
+
+   ![Grayscale Difference](examples/image_difference_grayscale_test.png)
+
+#### 3. `image_difference_thresholded_test.png`
+
+- **Description**: A binary image highlighting significant differences. White pixels represent differences above the sensitivity threshold, while black pixels represent no difference.
+- **Purpose**: Focus on critical differences after applying sensitivity thresholding.
+- **Example**:
+
+   ![Thresholded Difference](examples/image_difference_thresholded_test.png)
+
+#### 4. `difference_matrix_test.txt`
+
+- **Description**: A textual representation of the binary difference image as a matrix. Each number represents a pixel value (0 for no difference, 255 for significant difference).
+- **Purpose**: Useful for further data analysis or debugging.
+- **Example**: Contents of the file:
+   ```
+   0 0 0 255 255
+   0 0 0 0 255
+   255 255 0 0 0
+   ```
+
+#### 5. `result_image_test.png`
+
+- **Description**: The final result image with rectangles drawn around the detected differences.
+- **Purpose**: Highlight significant differences directly on the base image.
+- **Example**:
+
+   ![Result Image](examples/result_image_test.png)
+
+#### 6. `original_image_test.png`
+
+- **Description**: A copy of the base PDF image before any differences are marked.
+- **Purpose**: Serves as a reference for the original state of the base image.
+- **Example**:
+
+   ![Original Image](examples/original_image_test.png)
+
+### How to Enable Test Mode
+
+1. Open the `pdf_comparer.py` file.
+2. In the `PDFComparer` class, set the `self.testing_mode` attribute to `True`:
+   ```python
+   self.testing_mode = True  # Enable test mode
+   ```
+3. Run the application as usual. Test files will be saved in the current working directory.
+
 ## Troubleshooting
 
 - Ensure that the required dependencies are installed.
@@ -132,4 +156,4 @@ This project is licensed under the MIT License. See the LICENSE file for details
 
 Special thanks to the developers of PyQt5, PyMuPDF, and other libraries that make this project possible.
 
-This application was created almost entirely with the help of AI, specifically ChatGPT, which assisted in generating code, debugging, and documentation.
+Additionally, this application was created with significant assistance from AI, specifically OpenAI's ChatGPT, to streamline the development process.
