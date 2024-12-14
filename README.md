@@ -79,8 +79,8 @@ The application provides a test mode to save intermediate images and data during
 - **Purpose**: Verify that the PDFs were correctly loaded and converted into images.
 - **Example**:
 
-   ![Preview 1](examples/preview_1_test.png)
-   ![Preview 2](examples/preview_2_test.png)
+   ![Preview 1](images/preview_1_test.png)
+   ![Preview 2](images/preview_2_test.png)
 
 #### 2. `image_difference_grayscale_test.png`
 
@@ -88,7 +88,7 @@ The application provides a test mode to save intermediate images and data during
 - **Purpose**: Darker pixels indicate smaller differences, while brighter pixels indicate larger differences.
 - **Example**:
 
-   ![Grayscale Difference](examples/image_difference_grayscale_test.png)
+   ![Grayscale Difference](images/image_difference_grayscale_test.png)
 
 #### 3. `image_difference_thresholded_test.png`
 
@@ -96,7 +96,7 @@ The application provides a test mode to save intermediate images and data during
 - **Purpose**: Focus on critical differences after applying sensitivity thresholding.
 - **Example**:
 
-   ![Thresholded Difference](examples/image_difference_thresholded_test.png)
+   ![Thresholded Difference](images/image_difference_thresholded_test.png)
 
 #### 4. `difference_matrix_test.txt`
 
@@ -115,7 +115,7 @@ The application provides a test mode to save intermediate images and data during
 - **Purpose**: Highlight significant differences directly on the base image.
 - **Example**:
 
-   ![Result Image](examples/result_image_test.png)
+   ![Result Image](images/result_image_test.png)
 
 #### 6. `original_image_test.png`
 
@@ -123,7 +123,7 @@ The application provides a test mode to save intermediate images and data during
 - **Purpose**: Serves as a reference for the original state of the base image.
 - **Example**:
 
-   ![Original Image](examples/original_image_test.png)
+   ![Original Image](images/original_image_test.png)
 
 ### How to Enable Test Mode
 
