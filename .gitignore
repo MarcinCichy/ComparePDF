@@ -1,4 +1,7 @@
 __pycache__/*
+*.pyc
+*.log
+*.tmp
 venv/*
 .idea/*
 .git/*
