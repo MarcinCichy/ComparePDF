@@ -5,7 +5,7 @@ import logging
 from models.pdf_document import PDFDocument, ComparisonResult
 from services.pdf_service import PDFService
 from utils.image_utils import pil2qimage
-from config.settings import DEFAULT_SENSITIVITY, MSG_SELECT_FILES
+from config.settings import DEFAULT_SENSITIVITY, MSG_SELECT_FILES, TESTING_MODE
 
 MSG_ERROR_LOAD = "Błąd podczas ładowania pliku: {}"
 MSG_ERROR_COMPARE = "Błąd podczas porównywania dokumentów: {}"
@@ -23,7 +23,7 @@ class PDFController(QObject):
         self.pdf_service = PDFService()
 
     def _init_variables(self):
-        self.view = None
+        # self.view = None
         self.doc1 = None
         self.doc2 = None
         self.base_doc_num = 1
@@ -64,7 +64,7 @@ class PDFController(QObject):
             if self.view:
                 self.view.show_progress(f"Loading PDF file {doc_num}...")
 
-            document = self.pdf_service.load_pdf(file_path)
+            document = self.pdf_service.load_pdf(file_path, TESTING_MODE)
             if not document:
                 raise Exception(f"Failed to load PDF file {doc_num}")
 
@@ -140,7 +140,8 @@ class PDFController(QObject):
         self.comparison_result = self.pdf_service.compare_documents(
             base_doc,
             compare_doc,
-            self.sensitivity
+            self.sensitivity,
+            TESTING_MODE
         )
 
         if self.comparison_result and self.comparison_result.is_valid():

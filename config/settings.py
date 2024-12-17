@@ -35,6 +35,8 @@ SLIDER_MAX = 100
 ZOOM_FACTOR_IN = 1.25
 ZOOM_FACTOR_OUT = 0.8
 
+# Testing Mode
+TESTING_MODE = True  # Ustaw na True, aby włączyć tryb testowy
 
 def get_dark_palette():
     palette = QPalette()

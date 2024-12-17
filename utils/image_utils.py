@@ -29,7 +29,8 @@ def pil2qimage(pil_image):
 
 def compare_images(base_image: Image.Image,
                    compare_image: Image.Image,
-                   sensitivity: int = 15) -> Tuple[Optional[Image.Image], Optional[Image.Image]]:
+                   sensitivity: int = 15,
+                   testing_mode: bool = False) -> Tuple[Optional[Image.Image], Optional[Image.Image]]:
     """Porównuje dwa obrazy i zwraca obraz z zaznaczonymi różnicami."""
     try:
         # Konwersja do RGB jeśli potrzebna
@@ -40,12 +41,17 @@ def compare_images(base_image: Image.Image,
 
         # Wyrównanie rozmiarów obrazów
         if base_image.size != compare_image.size:
-            compare_image = compare_image.resize(base_image.size, Image.LANCZOS)
+            compare_image = resize_image_to_fit(compare_image, base_image.size, testing_mode)
 
         # Obliczanie różnicy
         diff = ImageChops.difference(base_image, compare_image)
+        if testing_mode:
+            diff.save("image_difference_grayscale_test.png", "PNG")
         diff = diff.convert('L')
         diff = diff.point(lambda x: 255 if x > sensitivity else 0, '1')
+
+        if testing_mode:
+            diff.save("image_difference_thresholded_test.png", "PNG")
 
         # Znajdowanie konturów
         diff_array = np.array(diff).astype(np.uint8)
@@ -64,18 +70,25 @@ def compare_images(base_image: Image.Image,
                 width=DIFFERENCE_OUTLINE_WIDTH
             )
 
+        if testing_mode:
+            result_image.save("result_image_test.png", "PNG")
+            base_image.save("original_image_test.png", "PNG")
+
         return result_image, base_image.copy()
 
     except Exception as e:
         logging.error(f"Failed to compare images: {e}")
         return None, None
 
-def resize_image_to_fit(image: Image.Image, max_size: Tuple[int, int]) -> Image.Image:
+def resize_image_to_fit(image: Image.Image, max_size: Tuple[int, int], testing_mode: bool = False) -> Image.Image:
     """Zmienia rozmiar obrazu zachowując proporcje."""
     try:
         ratio = min(max_size[0] / image.size[0], max_size[1] / image.size[1])
         new_size = tuple(int(dim * ratio) for dim in image.size)
-        return image.resize(new_size, Image.LANCZOS)
+        resized_image = image.resize(new_size, Image.LANCZOS)
+        if testing_mode:
+            resized_image.save("resized_image_test.png", "PNG")
+        return resized_image
     except Exception as e:
         logging.error(f"Failed to resize image: {e}")
         return image

@@ -1,0 +1,583 @@
+==================== 
+FILE: ComparePDF/graphics_view.py 
+
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsPixmapItem
+from PyQt5.QtGui import QPainter, QWheelEvent, QMouseEvent
+from PyQt5.QtCore import QRectF, Qt
+
+
+class GraphicsView(QGraphicsView):
+    def __init__(self, scene):
+        super(GraphicsView, self).__init__(scene)
+        self.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self._zoom = 0
+        self._empty = True
+        self._scene = scene
+        self._photo = None
+
+    def fitImageInView(self, scale=True):
+        try:
+            if self._photo is None:
+                return
+            self.resetTransform()
+            rect = self._photo.boundingRect()
+            if rect.isNull():
+                return
+            unity = self.transform().mapRect(QRectF(0, 0, 1, 1))
+            self.scale(1 / unity.width(), 1 / unity.height())
+            viewrect = self.viewport().rect()
+            scenerect = self.transform().mapRect(rect)
+            factor = min(viewrect.width() / scenerect.width(), viewrect.height() / scenerect.height())
+            self.scale(factor, factor)
+            self._zoom = 0
+        except Exception as e:
+            print(f"An error occurred in fitImageInView: {e}")
+
+    def hasPhoto(self):
+        return not self._empty
+
+    def setPhoto(self, pixmap=None):
+        try:
+            if pixmap is None or pixmap.isNull():
+                self._empty = True
+                if self._photo:
+                    self._scene.removeItem(self._photo)
+                    self._photo = None
+                self._scene.clear()
+            else:
+                self._empty = False
+                if not self._photo:
+                    self._photo = QGraphicsPixmapItem()
+                    self._scene.addItem(self._photo)
+                # Przechowujemy pixmapê jako atrybut
+                self._pixmap = pixmap
+                self._photo.setPixmap(self._pixmap)
+                self.fitImageInView()
+        except Exception as e:
+            print(f"An error occurred while setting photo: {e}")
+
+    def wheelEvent(self, event: QWheelEvent):
+        try:
+            if self.hasPhoto():
+                if event.angleDelta().y() > 0:
+                    factor = 1.25
+                    self._zoom += 1
+                else:
+                    factor = 0.8
+                    self._zoom -= 1
+                if self._zoom > 0:
+                    self.scale(factor, factor)
+                elif self._zoom == 0:
+                    self.fitImageInView()
+                else:
+                    self._zoom = 0
+        except Exception as e:
+            print(f"An error occurred in wheelEvent: {e}")
+
+    def mousePressEvent(self, event: QMouseEvent):
+        try:
+            if self._photo is not None:
+                if event.button() == Qt.LeftButton:
+                    self.setDragMode(QGraphicsView.ScrollHandDrag)
+                elif event.button() == Qt.RightButton:
+                    self.setDragMode(QGraphicsView.NoDrag)
+            super(GraphicsView, self).mousePressEvent(event)
+        except Exception as e:
+            print(f"An error occurred in mousePressEvent: {e}")
+
+ 
+
+==================== 
+FILE: ComparePDF/main.py 
+
+import sys
+import traceback
+from PyQt5.QtWidgets import QApplication, QMessageBox
+from pdf_comparer import PDFComparer
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    QMessageBox.critical(None, "Application Error", f"An unexpected error occurred:\n{error_msg}")
+
+
+sys.excepthook = handle_exception
+
+
+def main():
+    app = QApplication(sys.argv)
+    ex = PDFComparer()
+    ex.show()
+    sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()
+
+ 
+
+==================== 
+FILE: ComparePDF/pdf_comparer.py 
+
+import gc
+import logging
+import fitz
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QPushButton,
+                             QRadioButton, QSpacerItem, QSizePolicy, QFileDialog, QGraphicsScene,
+                             QFrame, QButtonGroup, QSlider, QMessageBox, QProgressDialog)
+from PyQt5.QtCore import (Qt, QRunnable, QThreadPool, pyqtSlot, QMetaObject, Q_ARG)
+from PyQt5.QtGui import QPixmap, QImage, QPainter
+from utils import pil2qimage, pdf_to_image, compare_images
+from graphics_view import GraphicsView
+import concurrent.futures
+
+MAX_IMAGE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+# Konfiguracja loggera
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.FileHandler("app.log"),
+                        logging.StreamHandler()
+                    ])
+
+logger = logging.getLogger(__name__)
+
+
+class PDFLoadTask(QRunnable):
+    def __init__(self, callback, file_path, num, parent, timeout=15):
+        super().__init__()
+        self.callback = callback
+        self.file_path = file_path
+        self.num = num
+        self.parent = parent
+        self.timeout = timeout  # Limit czasu w sekundach
+
+    def run(self):
+        try:
+            print(f"Loading PDF file: {self.file_path}")
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self.load_pdf)
+                pixmap = future.result(timeout=self.timeout)
+                QMetaObject.invokeMethod(self.parent, "loadFinished", Qt.QueuedConnection,
+                                         Q_ARG(QPixmap, pixmap), Q_ARG(int, self.num))
+        except concurrent.futures.TimeoutError:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Loading PDF file timed out after {self.timeout} seconds."))
+        except Exception as e:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Failed to load or process PDF file: {e}"))
+
+    def load_pdf(self):
+        with fitz.open(self.file_path) as doc:
+            page = doc.load_page(0)
+            pix = page.get_pixmap()
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(img)
+        return pixmap
+
+
+class PDFComparer(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.sensitivity = 15
+        self.mainLayout = None
+        self.centralWidget = None
+        self.previewLayout = None
+        self.radioGroup = QButtonGroup()
+        self.previewLabel1 = None
+        self.previewLabel2 = None
+        self.radio1 = None
+        self.radio2 = None
+        self.file1 = None
+        self.file2 = None
+        self.progress_dialog = None
+        self.compare_task = None
+        self.result_qimage = None
+        self.result_pixmap = None
+        self.original_qimage = None
+        self.original_pixmap = None
+        self.testing_mode = True  # Tryb testowy - w³¹cz, aby zapisywaæ obrazy poœrednie
+        self.initUI()
+        self.showMaximized()
+
+    def initUI(self):
+        self.setWindowTitle('PDF Comparator v2.0')
+        self.mainLayout = QHBoxLayout()
+        self.setupPreviewPanel()
+        self.setupGraphicsView()
+        self.setupSensitivityControl()
+        self.centralWidget = QWidget()
+        self.centralWidget.setLayout(self.mainLayout)
+        self.setCentralWidget(self.centralWidget)
+
+    def setupPreviewPanel(self):
+        self.previewLayout = QVBoxLayout()
+        self.setupFilePreview(1, "Click to load the first PDF file")
+        self.setupFilePreview(2, "Click to load the second PDF file")
+        self.setupControlButtons()
+        previewWidget = QWidget()
+        previewWidget.setLayout(self.previewLayout)
+        previewWidget.setMaximumWidth(450)
+        self.mainLayout.addWidget(previewWidget)
+
+    def setupSensitivityControl(self):
+        self.sensitivityLabel = QLabel("Sensitivity of recognize differences:")
+        self.sensitivityValueLabel = QLabel("{:03d}".format(15))
+        self.sensitivitySlider = QSlider(Qt.Horizontal)
+        self.sensitivitySlider.setMinimum(1)
+        self.sensitivitySlider.setMaximum(100)
+        self.sensitivitySlider.setValue(15)
+        self.sensitivitySlider.valueChanged.connect(self.updateSensitivity)
+        self.sensitivitySlider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.sensitivitySlider.setMinimumWidth(200)
+        self.sensitivitySlider.setMaximumWidth(205)
+        layout = QHBoxLayout()
+        layout.addWidget(self.sensitivityLabel)
+        layout.addWidget(self.sensitivitySlider)
+        layout.addWidget(self.sensitivityValueLabel)
+        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        layout.addItem(spacer)
+        self.previewLayout.addLayout(layout)
+
+    def updateSensitivity(self, value):
+        self.sensitivity = value
+        self.sensitivityValueLabel.setText("{:03d}".format(value))
+
+    def setupGraphicsView(self):
+        scene = QGraphicsScene()
+        self.view = GraphicsView(scene)
+        self.mainLayout.addWidget(self.view)
+        self.view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+    def setupFilePreview(self, num, text):
+        label = QLabel(text)
+        label.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        label.setAlignment(Qt.AlignCenter)
+        label.setMinimumSize(350, 150)
+        label.mousePressEvent = lambda event, num=num: self.loadFile(event, num)
+        radio = QRadioButton()
+        self.radioGroup.addButton(radio, num)
+        radio.toggled.connect(lambda checked, num=num: self.on_radio_changed(checked, num))
+        layout = QHBoxLayout()
+        layout.addWidget(label)
+        layout.addItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        layout.addWidget(radio)
+        widget = QWidget()
+        widget.setLayout(layout)
+        self.previewLayout.addWidget(widget)
+        setattr(self, f"previewLabel{num}", label)
+        setattr(self, f"radio{num}", radio)
+        if num == 1:
+            radio.setChecked(True)
+
+    def setupControlButtons(self):
+        buttonsLayout = QHBoxLayout()
+        for text in ["Compare", "Reset", "Clear", "Print"]:
+            btn = QPushButton(text)
+            btn.clicked.connect(getattr(self, f"on_{text.lower()}_clicked"))
+            buttonsLayout.addWidget(btn)
+        self.previewLayout.addLayout(buttonsLayout)
+
+    def loadFile(self, event, num):
+        try:
+            path, _ = QFileDialog.getOpenFileName(self, f"Select a PDF file {num}", "", "PDF files (*.pdf)")
+            if path:
+                setattr(self, f"file{num}", path)
+                task = PDFLoadTask(self.loadFinished, path, num, self)
+                QThreadPool.globalInstance().start(task)
+        except Exception as e:
+            self.showError(f"Failed to load PDF file: {str(e)}")
+
+    @pyqtSlot(QPixmap, int)
+    def loadFinished(self, pixmap, num):
+        if self.testing_mode:
+            pixmap.save(f"preview_{num}_test.png", "PNG")
+        label = getattr(self, f"previewLabel{num}")
+        label.setPixmap(pixmap.scaled(label.width(), label.height(), Qt.KeepAspectRatio))
+
+    @pyqtSlot(str)
+    def showError(self, message):
+        QMessageBox.critical(self, "Error", message)
+
+    def on_compare_clicked(self):
+        try:
+            if self.file1 and self.file2:
+                if self.radio1.isChecked():
+                    base_file = self.file1
+                    compare_file = self.file2
+                elif self.radio2.isChecked():
+                    base_file = self.file2
+                    compare_file = self.file1
+                else:
+                    QMessageBox.warning(self, "Selection Error", "Please select the base file using the radio buttons.")
+                    return
+                self.progress_dialog = QProgressDialog("Comparing PDFs...", "Cancel", 0, 0, self)
+                self.progress_dialog.setWindowModality(Qt.WindowModal)
+                self.progress_dialog.canceled.connect(self.on_cancel_compare)
+                self.progress_dialog.show()
+
+                self.compare_task = ImageCompareTask(base_file, compare_file, self.sensitivity, self.compareFinished, self)
+                QThreadPool.globalInstance().start(self.compare_task)
+            else:
+                QMessageBox.warning(self, "File Error", "Please upload both PDF files.")
+        except Exception as e:
+            error_msg = f"An error occurred: {e}."
+            self.showError(error_msg)
+
+    def on_cancel_compare(self):
+        if self.compare_task:
+            self.compare_task.cancel()
+        self.showError("Comparison canceled by user.")
+        if self.progress_dialog:
+            self.progress_dialog.close()
+            self.progress_dialog = None
+
+    @pyqtSlot(object, object)
+    def compareFinished(self, result_image, original_image):
+        if self.testing_mode:
+            result_image.save("result_image_test.png")
+            original_image.save("original_image_test.png")
+
+        if self.progress_dialog:
+            self.progress_dialog.canceled.disconnect(self.on_cancel_compare)
+            self.progress_dialog.close()
+            self.progress_dialog = None
+        try:
+            logging.debug("compareFinished called.")
+            if result_image and original_image:
+                logging.debug("Images are valid.")
+
+                result_image = result_image.convert("RGBA")
+                original_image = original_image.convert("RGBA")
+
+                self.result_qimage = pil2qimage(result_image)
+
+                if self.result_qimage is None or self.result_qimage.isNull():
+                    self.showError("Failed to convert result image to QImage.")
+                    return
+
+                image_size = self.result_qimage.sizeInBytes()
+                logging.debug(f"Result image size: {image_size} bytes.")
+
+                if image_size > MAX_IMAGE_SIZE:
+                    self.showError(
+                        f"Resulting image is too large to display ({image_size / (1024 * 1024):.2f} MB). Please reduce the sensitivity or try smaller PDFs.")
+                    return
+
+                self.result_pixmap = QPixmap.fromImage(self.result_qimage)
+                if self.result_pixmap.isNull():
+                    self.showError("Failed to create QPixmap from QImage.")
+                    return
+
+                self.view.setPhoto(self.result_pixmap)
+
+                self.original_qimage = pil2qimage(original_image)
+                self.original_pixmap = QPixmap.fromImage(self.original_qimage)
+
+                gc.collect()
+                logging.debug("Garbage collection completed after setting photo.")
+            else:
+                self.showError("Failed to generate comparison results.")
+        except Exception as e:
+            logging.error(f"Error displaying comparison results: {e}")
+            self.showError(f"Error displaying comparison results: {e}")
+            gc.collect()
+
+    def on_reset_clicked(self):
+        if self.previewLabel1 and self.previewLabel2:
+            self.previewLabel1.clear()
+            self.previewLabel2.clear()
+        self.file1, self.file2 = None, None
+        if self.view:
+            self.view.setPhoto(None)
+
+    def on_clear_clicked(self):
+        if hasattr(self, 'original_pixmap'):
+            self.view.setPhoto(self.original_pixmap)
+
+    def on_print_clicked(self):
+        printer = QPrinter(QPrinter.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec_() == QPrintDialog.Accepted:
+            painter = QPainter(printer)
+            self.view.render(painter)
+            painter.end()
+
+    def on_radio_changed(self, checked, num):
+        if checked:
+            if self.file1 and self.file2:
+                self.on_compare_clicked()
+
+
+class ImageCompareTask(QRunnable):
+    def __init__(self, base_file, compare_file, sensitivity, callback, parent, timeout=30):
+        super().__init__()
+        self.base_file = base_file
+        self.compare_file = compare_file
+        self.sensitivity = sensitivity
+        self.callback = callback
+        self.parent = parent
+        self.timeout = timeout
+        self._is_canceled = False
+
+    def cancel(self):
+        self._is_canceled = True
+
+    def run(self):
+        try:
+            print(f"Comparing images: {self.base_file} vs {self.compare_file}")
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self.compare_images)
+                result = future.result(timeout=self.timeout)
+                if result is None:
+                    return
+                result_image, original_image = result
+                QMetaObject.invokeMethod(self.parent, "compareFinished", Qt.QueuedConnection,
+                                         Q_ARG(object, result_image), Q_ARG(object, original_image))
+        except concurrent.futures.TimeoutError:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Image comparison timed out after {self.timeout} seconds."))
+        except Exception as e:
+            QMetaObject.invokeMethod(self.parent, "showError", Qt.QueuedConnection,
+                                     Q_ARG(str, f"Comparison failed: {e}"))
+
+    def compare_images(self):
+        if self._is_canceled:
+            return None
+        base_image = pdf_to_image(self.base_file, testing_mode=self.parent.testing_mode)
+        if base_image is None:
+            raise ValueError(f"Failed to convert {self.base_file} to image.")
+        if self._is_canceled:
+            return None
+        compare_image = pdf_to_image(self.compare_file, testing_mode=self.parent.testing_mode)
+        if compare_image is None:
+            raise ValueError(f"Failed to convert {self.compare_file} to image.")
+        if self._is_canceled:
+            return None
+        result_image, original_image = compare_images(base_image, compare_image, self.sensitivity, self.parent.testing_mode)
+        if result_image is None or original_image is None:
+            raise ValueError("Image comparison failed.")
+        return result_image, original_image
+ 
+
+==================== 
+FILE: ComparePDF/utils.py 
+
+from PyQt5.QtGui import QImage, QPixmap
+from PIL import Image, ImageChops, ImageDraw, ImageQt
+import numpy as np
+import fitz
+import cv2
+import traceback
+
+
+def pil2qimage(pil_image):
+    """Konwertuje obraz PIL na QImage bez u¿ycia ImageQt."""
+    try:
+        print(f"Converting PIL image to QImage without ImageQt. Size: {pil_image.size}, Mode: {pil_image.mode}")
+        if pil_image.mode == "RGB":
+            r, g, b = pil_image.split()
+            arr = Image.merge("RGB", (b, g, r)).tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_RGB888)
+        elif pil_image.mode == "RGBA":
+            r, g, b, a = pil_image.split()
+            arr = Image.merge("RGBA", (b, g, r, a)).tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
+        elif pil_image.mode == "L":
+            arr = pil_image.tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_Grayscale8)
+        else:
+            pil_image = pil_image.convert("RGBA")
+            r, g, b, a = pil_image.split()
+            arr = Image.merge("RGBA", (b, g, r, a)).tobytes()
+            qimage = QImage(arr, pil_image.width, pil_image.height, QImage.Format_RGBA8888)
+        print("Conversion successful without ImageQt.")
+        return qimage
+    except Exception as e:
+        print(f"An error occurred while converting PIL image to QImage: {e}")
+        traceback.print_exc()
+        return None
+
+
+def pdf_to_image(pdf_path, dpi=72, testing_mode=False):
+    """Converts the first page of a PDF to a PIL Image."""
+    try:
+        print(f"Converting PDF to image: {pdf_path}")
+        zoom = dpi / 72  # 72 DPI is the default value
+        mat = fitz.Matrix(zoom, zoom)
+        with fitz.open(pdf_path) as doc:
+            page = doc.load_page(0)
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            # Zapisz obraz po konwersji do pliku (dla testów)
+            if testing_mode:
+                img.save(f"{pdf_path}_converted_test.png", "PNG")
+
+        print(f"Successfully converted PDF to image: {pdf_path}")
+        return img
+    except Exception as e:
+        print(f"Failed to convert PDF to image: {e}")
+        return None
+
+
+def compare_images(base_image, compare_image, sensitivity=15, testing_mode=False):
+    """Porównuje dwa obrazy PIL i zwraca obraz z zaznaczonymi ró¿nicami."""
+    try:
+        print(f"Comparing images with sensitivity: {sensitivity}")
+        if base_image is None or compare_image is None:
+            print("One of the images was not loaded.")
+            return None, None
+        if base_image.mode != 'RGB':
+            base_image = base_image.convert('RGB')
+        if compare_image.mode != 'RGB':
+            compare_image = compare_image.convert('RGB')
+
+        # Oblicz ró¿nicê miêdzy obrazami
+        print("Calculating difference between images.")
+        diff = ImageChops.difference(base_image, compare_image)
+
+        # Zapisz ró¿nicê w odcieniach szaroœci (dla testów)
+        if testing_mode:
+            diff.save("image_difference_grayscale_test.png", "PNG")
+
+        # Przekszta³æ ró¿nicê do skali szaroœci i zastosuj progowanie
+        diff = diff.convert('L')
+        diff = diff.point(lambda x: 255 if x > sensitivity else 0, '1')
+
+        # Zapisz ró¿nicê po progowaniu (dla testów)
+        if testing_mode:
+            diff.save("image_difference_thresholded_test.png", "PNG")
+
+        # Przekszta³æ ró¿nicê na macierz NumPy
+        diff_array = np.array(diff)
+        if testing_mode:
+            np.savetxt("difference_matrix_test.txt", diff_array, fmt='%d')
+
+        # ZnajdŸ kontury ró¿nic za pomoc¹ OpenCV
+        print("Finding contours of differences.")
+        diff_array = diff_array.astype(np.uint8)
+        contours, _ = cv2.findContours(diff_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Rysuj prostok¹ty wokó³ ró¿nic
+        original_image = base_image.copy()
+        print(f"Drawing rectangles around differences: found {len(contours)} differences.")
+        draw = ImageDraw.Draw(base_image)
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            draw.rectangle([x - 5, y - 5, x + w + 5, y + h + 5], outline=(0, 0, 255, 255), width=3)
+
+        print("Comparison complete.")
+        return base_image, original_image
+    except Exception as e:
+        print(f"An error occurred while comparing images: {e}")
+        traceback.print_exc()
+        return None, None
+ 
+
