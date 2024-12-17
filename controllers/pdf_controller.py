@@ -23,8 +23,7 @@ class PDFController(QObject):
         self.pdf_service = PDFService()
 
     def _init_variables(self):
-        # self.view pozostawiamy bez zmian - nie resetujemy jej tutaj.
-        # Pozostałe zmienne pozostają bez zmian.
+        # Nie resetujemy self.view, aby po resecie nadal mieć do niego dostęp.
         self.doc1 = None
         self.doc2 = None
         self.base_doc_num = 1
@@ -37,12 +36,12 @@ class PDFController(QObject):
 
     @pyqtSlot(int)
     def set_base_document(self, doc_num: int):
-        """Ustawia dokument bazowy do porównania."""
         try:
             logging.debug(f"Setting base document to {doc_num}")
             self.base_doc_num = doc_num
-            if self.doc1 and self.doc2:
-                self.compare_documents()
+            # Jeśli wynik porównania istnieje, aktualizujemy różnice
+            if self.comparison_result and self.doc1 and self.doc2:
+                self._run_difference_analysis()
         except Exception as e:
             logging.error(f"Error setting base document: {e}")
             if self.view:
@@ -50,7 +49,6 @@ class PDFController(QObject):
 
     @pyqtSlot(int)
     def load_file(self, doc_num: int):
-        """Obsługuje ładowanie pliku PDF."""
         try:
             file_path, _ = QFileDialog.getOpenFileName(
                 self.view,
@@ -62,27 +60,25 @@ class PDFController(QObject):
             if not file_path:
                 return
 
-            self.view.show_progress(f"Loading PDF file {doc_num}...")
+            if self.view:
+                self.view.show_progress(f"Loading PDF file {doc_num}...")
 
-            # Ładowanie dokumentu
             document = self.pdf_service.load_pdf(file_path)
             if not document:
                 raise Exception(f"Failed to load PDF file {doc_num}")
 
-            # Aktualizacja stanu
             if doc_num == 1:
                 self.doc1 = document
             else:
                 self.doc2 = document
 
-            # Aktualizacja UI
             self._update_preview(doc_num, document)
 
-            self.view.hide_progress()
+            if self.view:
+                self.view.hide_progress()
 
-            # Automatyczne porównanie jeśli oba dokumenty są załadowane
-            if self.doc1 and self.doc2:
-                self.compare_documents()
+            # Nie uruchamiamy automatycznego porównania po wczytaniu obu plików
+            # Porównanie po kliknięciu "Compare".
 
         except Exception as e:
             logging.error(f"Error loading file: {e}")
@@ -91,9 +87,8 @@ class PDFController(QObject):
                 self.view.show_error(MSG_ERROR_LOAD.format(str(e)))
 
     def _update_preview(self, doc_num: int, document: PDFDocument):
-        """Aktualizuje podgląd dokumentu."""
         try:
-            if document and document.preview_image:
+            if document and document.preview_image and self.view:
                 qimage = pil2qimage(document.preview_image)
                 if qimage:
                     pixmap = QPixmap.fromImage(qimage)
@@ -103,17 +98,20 @@ class PDFController(QObject):
 
     @pyqtSlot(int)
     def set_sensitivity(self, value: int):
-        """Ustawia czułość porównywania."""
+        # Aktualizujemy czułość ale nie wywołujemy analizy od razu
         self.sensitivity = value
-        if self.doc1 and self.doc2:
-            self.compare_documents()
+
+    @pyqtSlot(int)
+    def update_diff_after_sensitivity_release(self, value: int):
+        # Po puszczeniu suwaka, jeśli było wcześniej porównanie, aktualizujemy różnice
+        self.sensitivity = value
+        if self.comparison_result and self.doc1 and self.doc2:
+            self._run_difference_analysis()
 
     @pyqtSlot()
     def compare_documents(self):
-        """Wykonuje porównanie dokumentów."""
         try:
             if not (self.doc1 and self.doc2):
-                # Brak załadowanych obu dokumentów - wyświetlamy komunikat błędu
                 if self.view:
                     self.view.show_error(MSG_SELECT_FILES)
                 return
@@ -121,24 +119,7 @@ class PDFController(QObject):
             if self.view:
                 self.view.show_progress(MSG_COMPARING)
 
-            # Określenie dokumentu bazowego i porównywanego
-            base_doc = self.doc1 if self.base_doc_num == 1 else self.doc2
-            compare_doc = self.doc2 if self.base_doc_num == 1 else self.doc1
-
-            # Porównanie dokumentów
-            self.comparison_result = self.pdf_service.compare_documents(
-                base_doc,
-                compare_doc,
-                self.sensitivity
-            )
-
-            if self.comparison_result and self.comparison_result.is_valid():
-                # Konwersja wyniku na QImage i wyświetlenie
-                result_qimage = pil2qimage(self.comparison_result.diff_image)
-                if result_qimage and self.view:
-                    self.view.graphics_view.setPhoto(QPixmap.fromImage(result_qimage))
-            else:
-                raise Exception("Comparison failed")
+            self._run_difference_analysis()
 
             if self.view:
                 self.view.hide_progress()
@@ -149,11 +130,27 @@ class PDFController(QObject):
                 self.view.hide_progress()
                 self.view.show_error(MSG_ERROR_COMPARE.format(str(e)))
 
+    def _run_difference_analysis(self):
+        base_doc = self.doc1 if self.base_doc_num == 1 else self.doc2
+        compare_doc = self.doc2 if self.base_doc_num == 1 else self.doc1
+
+        self.comparison_result = self.pdf_service.compare_documents(
+            base_doc,
+            compare_doc,
+            self.sensitivity
+        )
+
+        if self.comparison_result and self.comparison_result.is_valid():
+            result_qimage = pil2qimage(self.comparison_result.diff_image)
+            if result_qimage and self.view:
+                self.view.graphics_view.setPhoto(QPixmap.fromImage(result_qimage))
+        else:
+            raise Exception("Comparison failed")
+
     @pyqtSlot()
     def reset(self):
-        """Resetuje stan aplikacji."""
         try:
-            # Zapisujemy widok, aby go nie stracić
+            # Zapisujemy bieżący widok, żeby go nie stracić
             current_view = self.view
             self._init_variables()
             # Przywracamy zapisany widok
@@ -163,22 +160,21 @@ class PDFController(QObject):
                 self.view.preview_panel.clear_preview(1)
                 self.view.preview_panel.clear_preview(2)
                 self.view.graphics_view.setPhoto(None)
+
         except Exception as e:
             logging.error(f"Error resetting application: {e}")
 
     @pyqtSlot()
     def clear(self):
-        """Czyści wynik porównania i pokazuje oryginalny dokument."""
         try:
-            if self.comparison_result and self.comparison_result.original_image:
+            if self.comparison_result and self.comparison_result.original_image and self.view:
                 original_qimage = pil2qimage(self.comparison_result.original_image)
-                if original_qimage and self.view:
+                if original_qimage:
                     self.view.graphics_view.setPhoto(QPixmap.fromImage(original_qimage))
         except Exception as e:
             logging.error(f"Error clearing comparison: {e}")
 
     def cancel_operation(self):
-        """Anuluje bieżącą operację."""
         if self.current_operation:
             self.current_operation.cancel()
             self.current_operation = None
