@@ -1,0 +1,9 @@
+__pycache__/*
+venv/*
+.idea/*
+.git/*
+compare_files.py
+worker.py
+bkp
+compare
+output

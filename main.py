@@ -1,27 +1,24 @@
 import sys
-import traceback
-from PyQt5.QtWidgets import QApplication, QMessageBox
-from pdf_comparer import PDFComparer
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtGui import QPalette
+from PyQt5.QtCore import Qt
+from controllers.pdf_controller import PDFController
+from views.main_window import MainWindow
+from config.settings import get_dark_palette, QSS  # importujemy z pliku settings
 
-
-def handle_exception(exc_type, exc_value, exc_traceback):
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-        return
-    error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    QMessageBox.critical(None, "Application Error", f"An unexpected error occurred:\n{error_msg}")
-
-
-sys.excepthook = handle_exception
-
-
-def main():
+if __name__ == "__main__":
     app = QApplication(sys.argv)
-    ex = PDFComparer()
-    ex.show()
+    app.setStyle("Fusion")
+
+    # Ustawienie palety z settings.py
+    palette = get_dark_palette()
+    app.setPalette(palette)
+
+    # Ustawienie QSS z pliku settings.py
+    app.setStyleSheet(QSS)
+
+    controller = PDFController()
+    window = MainWindow(controller)
+    controller.set_view(window)
+    window.show()
     sys.exit(app.exec_())
-
-
-if __name__ == '__main__':
-    main()
-
