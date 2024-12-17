@@ -1,16 +1,16 @@
-# PDF Comparator v2.0
+# PDF Comparator v3.0
 
-PDF Comparator v2.0 is a PyQt5-based desktop application designed to visually compare two PDF files. It highlights differences between the PDFs, allowing users to quickly identify changes or discrepancies. The application also includes additional features like sensitivity adjustment, file preview, and printing options.
-
+PDF Comparator v3.0 is a PyQt5-based desktop application designed to visually compare two PDF files. It highlights differences between the documents, enabling users to quickly identify changes. In this updated version, the interface has been modernized using stylesheets (QSS) and a dedicated settings file for color palettes, as well as preparations for easily adding icons to buttons.
 ## Features
 
-- **PDF Comparison**: Compare two PDF files and highlight differences using visual markers.
-- **Custom Sensitivity**: Adjust sensitivity to fine-tune the detection of differences.
-- **Drag-and-Zoom**: Interactive view of the compared images with mouse drag and zoom.
+- **PDF Comparison**: Compare two PDF files and visually highlight their differences.
+- **Adjustable Sensitivity**: Fine-tune the sensitivity to control which differences are highlighted
+- **Interactive View**: IPan and zoom the comparison results using your mouse.
 - **PDF Preview**: Preview the loaded PDF files before comparison.
 - **Result Printing**: Print the comparison result directly from the application.
 - **Error Handling**: Robust error handling with descriptive messages for user convenience.
 - **Test Mode**: Save intermediate results and debug data during the comparison process.
+- **Modern Look**: Version 3.0 introduces a contemporary, dark-themed UI with QSS and a flexible structure for adding icons to buttons.
 
 ## Requirements
 
@@ -49,13 +49,24 @@ To run this application, the following software and libraries are required:
 
 ```
 ComparePDF/
-|
-|-- graphics_view.py     # Custom QGraphicsView class for image display
-|-- main.py              # Entry point of the application
-|-- pdf_comparer.py      # Main GUI logic and application features
-|-- utils.py             # Utility functions for image and PDF processing
-|-- requirements.txt     # List of dependencies
-|-- app.log              # Application logs (created at runtime)
+|-- main.py               # Entry point of the application, applies palette/QSS and launches the main window
+|-- main_window.py        # Main application window (UI layout and setup)
+|-- preview_panel.py      # PDF preview panel with radio buttons for base selection
+|-- control_panel.py      # Control panel with Compare, Reset, Clear, Print buttons and sensitivity slider
+|-- graphics_view.py      # Custom QGraphicsView for image display and interaction
+|-- controllers/
+|   `-- pdf_controller.py # Application logic: loading PDFs, comparing, resetting, handling errors
+|-- services/
+|   `-- pdf_service.py    # PDF operations: loading files, converting to images, performing comparisons
+|-- models/
+|   `-- pdf_document.py   # Data models for PDF documents and comparison results
+|-- utils/
+|   `-- image_utils.py    # Image processing utilities (difference detection, resizing)
+|-- config/
+|   `-- settings.py       # Application configuration (colors, default sensitivity, etc.)
+|-- settings.py           # External file for style/QSS and palette definitions
+|-- icons/                # Folder for icons (optional)
+`-- requirements.txt      # List of dependencies
 ```
 
 ## Usage
@@ -66,6 +77,20 @@ ComparePDF/
 4. Adjust the sensitivity slider to fine-tune the comparison.
 5. Click the "Compare" button to generate the difference image.
 6. View the highlighted differences and optionally print the results.
+
+## Changes in Version 3.0
+* Modern Interface:
+
+  Uses the Fusion style and a QSS stylesheet defined in settings.py to create a cohesive, dark, and modern UI.
+* Separation of Style and Logic:
+
+  The color palette and QSS stylesheet are placed in a separate file (settings.py), making it easier to modify the look without altering core logic.
+* Icon Support:
+
+   The structure now supports adding icons to buttons (e.g., in control_panel.py via QIcon and the icons/ folder), improving the visual intuitiveness of the UI.
+* Expanded Dimensions:
+
+  The UI elements (PDF areas, buttons, sliders) have been enlarged and adjusted to be more readable and modern-looking.
 
 ## Test Mode (`testing_mode`)
 

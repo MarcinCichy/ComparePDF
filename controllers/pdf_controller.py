@@ -23,7 +23,7 @@ class PDFController(QObject):
         self.pdf_service = PDFService()
 
     def _init_variables(self):
-        # Nie resetujemy self.view, aby po resecie nadal mieć do niego dostęp.
+        self.view = None
         self.doc1 = None
         self.doc2 = None
         self.base_doc_num = 1
@@ -39,7 +39,8 @@ class PDFController(QObject):
         try:
             logging.debug(f"Setting base document to {doc_num}")
             self.base_doc_num = doc_num
-            # Jeśli wynik porównania istnieje, aktualizujemy różnice
+            # Po pierwszym porównaniu zmiana radiobuttona powoduje natychmiastowe ponowne porównanie,
+            # jeśli oba dokumenty załadowane i jest już wynik z poprzedniego porównania.
             if self.comparison_result and self.doc1 and self.doc2:
                 self._run_difference_analysis()
         except Exception as e:
@@ -77,8 +78,8 @@ class PDFController(QObject):
             if self.view:
                 self.view.hide_progress()
 
-            # Nie uruchamiamy automatycznego porównania po wczytaniu obu plików
-            # Porównanie po kliknięciu "Compare".
+            # Po wczytaniu obu plików nie ma automatycznej analizy.
+            # Analiza dopiero po wciśnięciu "Compare" lub zmianie parametrów po pierwszej analizie.
 
         except Exception as e:
             logging.error(f"Error loading file: {e}")
@@ -98,12 +99,13 @@ class PDFController(QObject):
 
     @pyqtSlot(int)
     def set_sensitivity(self, value: int):
-        # Aktualizujemy czułość ale nie wywołujemy analizy od razu
+        # Tylko zmieniamy wartość czułości, nie wywołujemy analizy od razu.
         self.sensitivity = value
 
     @pyqtSlot(int)
     def update_diff_after_sensitivity_release(self, value: int):
-        # Po puszczeniu suwaka, jeśli było wcześniej porównanie, aktualizujemy różnice
+        # Po zwolnieniu suwaka, jeśli mamy już wynik (compare został kliknięty wcześniej)
+        # i oba dokumenty są załadowane, to wykonujemy ponowną analizę.
         self.sensitivity = value
         if self.comparison_result and self.doc1 and self.doc2:
             self._run_difference_analysis()
@@ -131,6 +133,7 @@ class PDFController(QObject):
                 self.view.show_error(MSG_ERROR_COMPARE.format(str(e)))
 
     def _run_difference_analysis(self):
+        # Metoda pomocnicza do uruchamiania analizy różnic.
         base_doc = self.doc1 if self.base_doc_num == 1 else self.doc2
         compare_doc = self.doc2 if self.base_doc_num == 1 else self.doc1
 
@@ -150,17 +153,11 @@ class PDFController(QObject):
     @pyqtSlot()
     def reset(self):
         try:
-            # Zapisujemy bieżący widok, żeby go nie stracić
-            current_view = self.view
             self._init_variables()
-            # Przywracamy zapisany widok
-            self.view = current_view
-
             if self.view:
                 self.view.preview_panel.clear_preview(1)
                 self.view.preview_panel.clear_preview(2)
                 self.view.graphics_view.setPhoto(None)
-
         except Exception as e:
             logging.error(f"Error resetting application: {e}")
 
