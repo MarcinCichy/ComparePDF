@@ -47,14 +47,21 @@ def compare_images(base_image: Image.Image,
         diff = ImageChops.difference(base_image, compare_image)
         if testing_mode:
             diff.save("image_difference_grayscale_test.png", "PNG")
+
         diff = diff.convert('L')
-        diff = diff.point(lambda x: 255 if x > sensitivity else 0, '1')
+        diff = diff.point(lambda x: 255 if x > sensitivity else 0)
 
         if testing_mode:
             diff.save("image_difference_thresholded_test.png", "PNG")
 
         # Znajdowanie konturów
         diff_array = np.array(diff).astype(np.uint8)
+
+        # Zapis pliku tekstowego z różnicami
+        if testing_mode:
+            np.savetxt("difference_matrix_test.txt", diff_array, fmt='%d')
+            logging.info("Plik difference_matrix_test.txt został pomyślnie zapisany.")
+
         contours, _ = cv2.findContours(diff_array,
                                        cv2.RETR_EXTERNAL,
                                        cv2.CHAIN_APPROX_SIMPLE)
