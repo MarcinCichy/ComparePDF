@@ -1,6 +1,6 @@
-# PDF Comparator v3.0
+# ComparePDF  v3.0
 
-PDF Comparator v3.0 is a PyQt5-based desktop application designed to visually compare two PDF files. It highlights differences between the documents, enabling users to quickly identify changes. In this updated version, the interface has been modernized using stylesheets (QSS) and a dedicated settings file for color palettes, as well as preparations for easily adding icons to buttons.
+ComparePDF (PDF Comparator)  v3.0 is a PyQt5-based desktop application designed to visually compare two PDF files. It highlights differences between the documents, enabling users to quickly identify changes. In this updated version, the interface has been modernized using stylesheets (QSS) and a dedicated settings file for color palettes, as well as preparations for easily adding icons to buttons.
 ## Features
 
 - **PDF Comparison**: Compare two PDF files and visually highlight their differences.
