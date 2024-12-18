@@ -1,5 +1,6 @@
-PyQt5
+PyQt5~=5.15.10
 Fitz (PyMuPDF)
-Pillow
-NumPy
+Pillow~=10.3.0
+NumPy~=1.26.4
 OpenCV
+opencv-python~=4.10.0.84
