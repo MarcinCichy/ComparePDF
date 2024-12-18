@@ -10,3 +10,4 @@ worker.py
 bkp
 compare
 output
+*.exe
